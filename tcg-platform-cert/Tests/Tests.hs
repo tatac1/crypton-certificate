@@ -7,6 +7,7 @@ import qualified Tests.Platform as Platform
 import qualified Tests.Component as Component
 import qualified Tests.Delta as Delta
 import qualified Tests.Attributes as Attributes
+import qualified Tests.Properties as Properties
 
 main :: IO ()
 main = defaultMain tests
@@ -18,4 +19,5 @@ tests = testGroup "TCG Platform Certificate Tests"
   , Component.tests
   , Delta.tests
   , Attributes.tests
+  , Properties.tests
   ]

@@ -442,7 +442,39 @@ updateComponent config component =
       | comp == component = (comp, ComponentModified)
       | otherwise = (comp, status)
 
--- ASN.1 instances will be implemented in a separate phase
--- instance ASN1Object DeltaPlatformCertificateInfo where ...
--- instance ASN1Object DeltaPlatformConfiguration where ...
--- instance ASN1Object ComponentDelta where ...
+-- ASN.1 instances for basic types
+
+instance ASN1Object DeltaOperation where
+  toASN1 op xs = [IntVal (fromIntegral $ fromEnum op)] ++ xs
+  fromASN1 (IntVal n : xs)
+    | n >= 0 && n <= 4 = Right (toEnum (fromIntegral n), xs)
+    | otherwise = Left "DeltaOperation: Invalid enum value"
+  fromASN1 _ = Left "DeltaOperation: Invalid ASN1 structure"
+
+instance ASN1Object ChangeType where
+  toASN1 ct xs = case ct of
+    ChangeHardwareAddition -> [IntVal 0] ++ xs
+    ChangeHardwareRemoval -> [IntVal 1] ++ xs
+    ChangeHardwareReplacement -> [IntVal 2] ++ xs
+    ChangeFirmwareUpdate -> [IntVal 3] ++ xs
+    ChangeSoftwareInstallation -> [IntVal 4] ++ xs
+    ChangeSoftwareRemoval -> [IntVal 5] ++ xs
+    ChangeConfigurationUpdate -> [IntVal 6] ++ xs
+    ChangeSecurityUpdate -> [IntVal 7] ++ xs
+    ChangeMaintenance -> [IntVal 8] ++ xs
+    ChangeOther desc -> [IntVal 99, OctetString desc] ++ xs
+  
+  fromASN1 (IntVal n : xs) = case n of
+    0 -> Right (ChangeHardwareAddition, xs)
+    1 -> Right (ChangeHardwareRemoval, xs)
+    2 -> Right (ChangeHardwareReplacement, xs)
+    3 -> Right (ChangeFirmwareUpdate, xs)
+    4 -> Right (ChangeSoftwareInstallation, xs)
+    5 -> Right (ChangeSoftwareRemoval, xs)
+    6 -> Right (ChangeConfigurationUpdate, xs)
+    7 -> Right (ChangeSecurityUpdate, xs)
+    8 -> Right (ChangeMaintenance, xs)
+    99 -> Left "ChangeType: ChangeOther requires additional OctetString"
+    _ -> Left "ChangeType: Invalid enum value"
+  fromASN1 (IntVal 99 : OctetString desc : xs) = Right (ChangeOther desc, xs)
+  fromASN1 _ = Left "ChangeType: Invalid ASN1 structure"

@@ -18,6 +18,7 @@ module Data.X509.TCG.Component
     ComponentIdentifierV2 (..),
     ComponentClass (..),
     ComponentAddress (..),
+    ComponentAddressType (..),
 
     -- * Component Hierarchy
     ComponentHierarchy (..),
