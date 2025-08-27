@@ -1,7 +1,6 @@
 module Tests.Component (tests) where
 
 import Test.Tasty
-import Test.Tasty.QuickCheck  
 import Test.Tasty.HUnit
 import qualified Data.ByteString.Char8 as B
 import Data.X509.TCG.Component

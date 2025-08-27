@@ -1,64 +1,63 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE InstanceSigs #-}
 
 -- |
 -- Module      : Data.X509.TCG.Delta
--- License     : BSD-style  
+-- License     : BSD-style
 -- Maintainer  : Toru Tomita <toru.tomita@gmail.com>
 -- Stability   : experimental
 -- Portability : unknown
 --
 -- TCG Delta Platform Certificate support.
 --
--- This module implements Delta Platform Certificates as defined in the IWG Platform 
+-- This module implements Delta Platform Certificates as defined in the IWG Platform
 -- Certificate Profile v1.1. Delta Platform Certificates track changes in platform
 -- configuration over time by referencing a base Platform Certificate.
 module Data.X509.TCG.Delta
   ( -- * Delta Platform Certificate Types
     DeltaPlatformCertificateInfo (..),
     SignedDeltaPlatformCertificate,
-    
+
     -- * Delta Configuration
     DeltaPlatformConfiguration (..),
     PlatformConfigurationDelta (..),
     ComponentDelta (..),
     DeltaOperation (..),
-    
+
     -- * Base Certificate References
     BasePlatformCertificateRef (..),
     CertificateChain (..),
-    
+
     -- * Change Tracking
     ChangeRecord (..),
     ChangeType (..),
     ChangeMetadata (..),
-    
+
     -- * Marshalling Operations
     encodeSignedDeltaPlatformCertificate,
     decodeSignedDeltaPlatformCertificate,
-    
+
     -- * Accessor Functions
     getDeltaPlatformCertificate,
     getBaseCertificateReference,
     getPlatformConfigurationDelta,
     getComponentDeltas,
     getChangeRecords,
-    
+
     -- * Validation Functions
     validateDeltaCertificate,
     applyDeltaToBase,
     computeResultingConfiguration,
-  ) where
+  )
+where
 
+import Data.ASN1.Types
 import qualified Data.ByteString as B
 import Data.Hourglass (DateTime)
-import Data.X509 (DistinguishedName, SignatureALG, Extensions)
+import Data.X509 (DistinguishedName, Extensions, SignatureALG, SignedExact, decodeSignedObject, encodeSignedObject, getSigned, signedObject)
+import Data.X509.AttCert (AttCertIssuer, AttCertValidityPeriod, Holder, UniqueID)
 import Data.X509.Attribute (Attributes)
-import Data.X509.AttCert (Holder, AttCertIssuer, AttCertValidityPeriod, UniqueID)
-import Data.X509 (SignedExact, getSigned, signedObject, encodeSignedObject, decodeSignedObject)
 import Data.X509.TCG.Component (ComponentIdentifier, ComponentIdentifierV2)
-import Data.X509.TCG.Platform (PlatformConfiguration, PlatformConfigurationV2(..), ComponentStatus(..))
-import Data.ASN1.Types
+import Data.X509.TCG.Platform (ComponentStatus (..), PlatformConfigurationV2 (..))
 
 -- | Delta Platform Certificate Information structure
 --
@@ -93,8 +92,9 @@ instance ASN1Object DeltaPlatformCertificateInfo where
         ++ toASN1 dciExts []
         ++ toASN1 dciBase []
         ++ [End Sequence]
-    ) ++ xs
-  fromASN1 xs = Left "Delta platform certificate parsing not implemented"
+    )
+      ++ xs
+  fromASN1 _ = Left "Delta platform certificate parsing not implemented"
 
 -- | A Signed Delta Platform Certificate
 type SignedDeltaPlatformCertificate = SignedExact DeltaPlatformCertificateInfo
@@ -144,11 +144,16 @@ data ComponentDelta = ComponentDelta
 --
 -- Types of operations that can be performed on components.
 data DeltaOperation
-  = DeltaAdd       -- ^ Component was added to the platform
-  | DeltaRemove    -- ^ Component was removed from the platform
-  | DeltaModify    -- ^ Component was modified (firmware update, etc.)
-  | DeltaReplace   -- ^ Component was replaced with another component
-  | DeltaUpdate    -- ^ Component configuration or properties were updated
+  = -- | Component was added to the platform
+    DeltaAdd
+  | -- | Component was removed from the platform
+    DeltaRemove
+  | -- | Component was modified (firmware update, etc.)
+    DeltaModify
+  | -- | Component was replaced with another component
+    DeltaReplace
+  | -- | Component configuration or properties were updated
+    DeltaUpdate
   deriving (Show, Eq, Enum)
 
 -- | Base Platform Certificate Reference structure
@@ -171,8 +176,9 @@ instance ASN1Object BasePlatformCertificateRef where
         ++ maybe [] (\h -> [OctetString h]) hash
         ++ maybe [] (\v -> toASN1 v []) validity
         ++ [End Sequence]
-    ) ++ xs
-  fromASN1 xs = Left "BasePlatformCertificateRef parsing not implemented"
+    )
+      ++ xs
+  fromASN1 _ = Left "BasePlatformCertificateRef parsing not implemented"
 
 -- | Certificate Chain structure
 --
@@ -215,11 +221,16 @@ data ChangeType
 --
 -- Additional metadata about changes.
 data ChangeMetadata = ChangeMetadata
-  { cmInitiator :: Maybe B.ByteString,      -- ^ Who initiated the change
-    cmApprover :: Maybe B.ByteString,       -- ^ Who approved the change
-    cmChangeTicket :: Maybe B.ByteString,   -- ^ Reference to change management system
-    cmRollbackInfo :: Maybe B.ByteString,   -- ^ Information for rolling back the change
-    cmAdditionalInfo :: [(B.ByteString, B.ByteString)]  -- ^ Additional key-value pairs
+  { -- | Who initiated the change
+    cmInitiator :: Maybe B.ByteString,
+    -- | Who approved the change
+    cmApprover :: Maybe B.ByteString,
+    -- | Reference to change management system
+    cmChangeTicket :: Maybe B.ByteString,
+    -- | Information for rolling back the change
+    cmRollbackInfo :: Maybe B.ByteString,
+    -- | Additional key-value pairs
+    cmAdditionalInfo :: [(B.ByteString, B.ByteString)]
   }
   deriving (Show, Eq)
 
@@ -279,7 +290,7 @@ getBaseCertificateReference cert = dpciBaseCertificateRef $ getDeltaPlatformCert
 -- * Affected component lists and change tracking
 --
 -- This information is essential for:
--- * Applying delta changes to a base platform configuration  
+-- * Applying delta changes to a base platform configuration
 -- * Tracking platform evolution over time
 -- * Validating that changes are authorized and properly documented
 -- * Building audit trails of platform modifications
@@ -300,21 +311,21 @@ getBaseCertificateReference cert = dpciBaseCertificateRef $ getDeltaPlatformCert
 --   Nothing -> putStrLn \"No delta configuration found in certificate\"
 -- @
 getPlatformConfigurationDelta :: SignedDeltaPlatformCertificate -> Maybe PlatformConfigurationDelta
-getPlatformConfigurationDelta cert = 
+getPlatformConfigurationDelta cert =
   case lookupDeltaAttribute "2.23.133.2.23" (dpciAttributes $ getDeltaPlatformCertificate cert) of
     Just deltaConfig -> parseDeltaPlatformConfiguration deltaConfig
     Nothing -> Nothing
 
 -- | Extract Component Deltas from a Delta Platform Certificate
 getComponentDeltas :: SignedDeltaPlatformCertificate -> [ComponentDelta]
-getComponentDeltas cert = 
+getComponentDeltas cert =
   case getPlatformConfigurationDelta cert of
     Just delta -> pcdComponentDeltas delta
     Nothing -> []
 
 -- | Extract Change Records from a Delta Platform Certificate
 getChangeRecords :: SignedDeltaPlatformCertificate -> [ChangeRecord]
-getChangeRecords cert = 
+getChangeRecords cert =
   case getPlatformConfigurationDelta cert of
     Just delta -> pcdChangeRecords delta
     Nothing -> []
@@ -325,11 +336,11 @@ getChangeRecords cert =
 --
 -- Checks that the certificate is properly formed and references a valid base certificate.
 validateDeltaCertificate :: SignedDeltaPlatformCertificate -> [String]
-validateDeltaCertificate cert = 
+validateDeltaCertificate cert =
   let deltaInfo = getDeltaPlatformCertificate cert
       baseRef = dpciBaseCertificateRef deltaInfo
-  in validateBaseCertificateRef baseRef ++ 
-     validateDeltaAttributes (dpciAttributes deltaInfo)
+   in validateBaseCertificateRef baseRef
+        ++ validateDeltaAttributes (dpciAttributes deltaInfo)
 
 -- | Apply a Delta Platform Certificate to a base configuration
 --
@@ -364,11 +375,11 @@ validateDeltaCertificate cert =
 --   Left error -> putStrLn $ \"Failed to apply delta: \" ++ error
 -- @
 applyDeltaToBase :: PlatformConfigurationV2 -> PlatformConfigurationDelta -> Either String PlatformConfigurationV2
-applyDeltaToBase baseConfig delta = 
+applyDeltaToBase baseConfig delta =
   Right $ foldl applyComponentDelta baseConfig (pcdComponentDeltas delta)
   where
     applyComponentDelta :: PlatformConfigurationV2 -> ComponentDelta -> PlatformConfigurationV2
-    applyComponentDelta config compDelta = 
+    applyComponentDelta config compDelta =
       case cdOperation compDelta of
         DeltaAdd -> addComponent config (cdComponent compDelta)
         DeltaRemove -> removeComponent config (cdComponent compDelta)
@@ -378,7 +389,7 @@ applyDeltaToBase baseConfig delta =
 
 -- | Compute the resulting configuration after applying delta certificates
 computeResultingConfiguration :: PlatformConfigurationV2 -> [PlatformConfigurationDelta] -> Either String PlatformConfigurationV2
-computeResultingConfiguration baseConfig deltas = 
+computeResultingConfiguration baseConfig deltas =
   foldl (\acc delta -> acc >>= \config -> applyDeltaToBase config delta) (Right baseConfig) deltas
 
 -- Helper functions
@@ -403,32 +414,32 @@ validateDeltaAttributes _ = [] -- TODO: Implement validation
 
 -- Component manipulation helper functions
 addComponent :: PlatformConfigurationV2 -> ComponentIdentifierV2 -> PlatformConfigurationV2
-addComponent config component = 
-  config { pcv2Components = pcv2Components config ++ [(component, ComponentAdded)] }
+addComponent config component =
+  config {pcv2Components = pcv2Components config ++ [(component, ComponentAdded)]}
 
-removeComponent :: PlatformConfigurationV2 -> ComponentIdentifierV2 -> PlatformConfigurationV2  
-removeComponent config component = 
-  config { pcv2Components = filter ((/= component) . fst) (pcv2Components config) }
+removeComponent :: PlatformConfigurationV2 -> ComponentIdentifierV2 -> PlatformConfigurationV2
+removeComponent config component =
+  config {pcv2Components = filter ((/= component) . fst) (pcv2Components config)}
 
 modifyComponent :: PlatformConfigurationV2 -> ComponentIdentifierV2 -> PlatformConfigurationV2
-modifyComponent config component = 
-  config { pcv2Components = map updateStatus (pcv2Components config) }
+modifyComponent config component =
+  config {pcv2Components = map updateStatus (pcv2Components config)}
   where
-    updateStatus (comp, status) 
+    updateStatus (comp, status)
       | comp == component = (comp, ComponentModified)
       | otherwise = (comp, status)
 
 replaceComponent :: PlatformConfigurationV2 -> Maybe ComponentIdentifierV2 -> ComponentIdentifierV2 -> PlatformConfigurationV2
 replaceComponent config Nothing newComp = addComponent config newComp
-replaceComponent config (Just oldComp) newComp = 
+replaceComponent config (Just oldComp) newComp =
   addComponent (removeComponent config oldComp) newComp
 
 updateComponent :: PlatformConfigurationV2 -> ComponentIdentifierV2 -> PlatformConfigurationV2
-updateComponent config component = 
-  config { pcv2Components = map updateStatus (pcv2Components config) }
+updateComponent config component =
+  config {pcv2Components = map updateStatus (pcv2Components config)}
   where
     updateStatus (comp, status)
-      | comp == component = (comp, ComponentModified) 
+      | comp == component = (comp, ComponentModified)
       | otherwise = (comp, status)
 
 -- ASN.1 instances will be implemented in a separate phase

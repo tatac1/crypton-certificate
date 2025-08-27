@@ -1,8 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE InstanceSigs #-}
 
 -- |
--- Module      : Data.X509.TCG.Component  
+-- Module      : Data.X509.TCG.Component
 -- License     : BSD-style
 -- Maintainer  : Toru Tomita <toru.tomita@gmail.com>
 -- Stability   : experimental
@@ -10,7 +9,7 @@
 --
 -- TCG Component identification and hierarchy structures.
 --
--- This module implements component identification as defined in the IWG Platform 
+-- This module implements component identification as defined in the IWG Platform
 -- Certificate Profile v1.1. Components represent hardware and software elements
 -- that make up a platform configuration.
 module Data.X509.TCG.Component
@@ -19,33 +18,31 @@ module Data.X509.TCG.Component
     ComponentIdentifierV2 (..),
     ComponentClass (..),
     ComponentAddress (..),
-    
-    -- * Component Hierarchy  
+
+    -- * Component Hierarchy
     ComponentHierarchy (..),
     ComponentTree (..),
     ComponentReference (..),
-    
+
     -- * Component Properties
     ComponentProperties (..),
     ComponentMeasurement (..),
     ComponentDescriptor (..),
-    
+
     -- * Component Relationships
     ComponentRelation (..),
     ComponentDependency (..),
-    
+
     -- * Utility Functions
     isComponentClass,
     getComponentByAddress,
     buildComponentTree,
     validateComponentHierarchy,
-  ) where
+  )
+where
 
-import qualified Data.ByteString as B
-import qualified Data.Map.Strict as Map
 import Data.ASN1.Types
-import Data.ASN1.Parse
-import Data.X509.TCG.OID
+import qualified Data.ByteString as B
 
 -- | Component Identifier structure (v1)
 --
@@ -102,7 +99,8 @@ data ComponentClass
   | ComponentFireWire
   | ComponentSCSI
   | ComponentIDE
-  | ComponentOther OID  -- ^ For custom component classes
+  | -- | For custom component classes
+    ComponentOther OID
   deriving (Show, Eq)
 
 -- | Component Address structure
@@ -126,7 +124,7 @@ data ComponentAddressType
   | AddressOther B.ByteString
   deriving (Show, Eq)
 
--- | Component Hierarchy structure  
+-- | Component Hierarchy structure
 --
 -- Represents the hierarchical relationship between components.
 data ComponentHierarchy = ComponentHierarchy
@@ -190,7 +188,8 @@ data MeasurementType
 data ComponentDescriptor = ComponentDescriptor
   { cdDescription :: B.ByteString,
     cdVendorInfo :: Maybe B.ByteString,
-    cdProperties :: [(B.ByteString, B.ByteString)]  -- ^ Key-value pairs
+    -- | Key-value pairs
+    cdProperties :: [(B.ByteString, B.ByteString)]
   }
   deriving (Show, Eq)
 
@@ -249,94 +248,39 @@ getComponentByAddress addr hierarchy = searchInTree addr (chComponentTree hierar
       case ci2ComponentAddress (ctComponent tree) of
         Just compAddr | compAddr == target -> Just (ctComponent tree)
         _ -> searchInChildren target (ctChildren tree)
-    
-    searchInChildren :: ComponentAddress -> [ComponentTree] -> Maybe ComponentIdentifierV2  
-    searchInChildren target trees = 
+
+    searchInChildren :: ComponentAddress -> [ComponentTree] -> Maybe ComponentIdentifierV2
+    searchInChildren target trees =
       case trees of
         [] -> Nothing
-        (t:ts) -> case searchInTree target t of
+        (t : ts) -> case searchInTree target t of
           Just result -> Just result
           Nothing -> searchInChildren target ts
 
 -- | Build a component tree from a list of components
 buildComponentTree :: [ComponentIdentifierV2] -> ComponentTree
-buildComponentTree components = 
+buildComponentTree components =
   case components of
     [] -> error "Cannot build tree from empty component list"
-    (root:_) -> ComponentTree root [] defaultProperties
+    (root : _) -> ComponentTree root [] defaultProperties
   where
     defaultProperties = ComponentProperties [] Nothing []
 
 -- | Validate component hierarchy for consistency
-validateComponentHierarchy :: ComponentHierarchy -> [String]  
-validateComponentHierarchy hierarchy = 
+validateComponentHierarchy :: ComponentHierarchy -> [String]
+validateComponentHierarchy hierarchy =
   validateTree (chComponentTree hierarchy)
   where
     validateTree :: ComponentTree -> [String]
-    validateTree tree = 
-      validateComponent (ctComponent tree) ++ 
-      concatMap validateTree (ctChildren tree)
-    
+    validateTree tree =
+      validateComponent (ctComponent tree)
+        ++ concatMap validateTree (ctChildren tree)
+
     validateComponent :: ComponentIdentifierV2 -> [String]
     validateComponent component
       | B.null (ci2Manufacturer component) = ["Component missing manufacturer"]
       | B.null (ci2Model component) = ["Component missing model"]
       | otherwise = []
-
--- Helper function to convert ComponentClass to OID
-componentClassToOID :: ComponentClass -> OID
-componentClassToOID ComponentMotherboard = tcg_class_motherboard
-componentClassToOID ComponentCPU = tcg_class_cpu
-componentClassToOID ComponentMemory = tcg_class_memory
-componentClassToOID ComponentHardDrive = tcg_class_hardDrive
-componentClassToOID ComponentNetworkInterface = tcg_class_networkInterface
-componentClassToOID ComponentGraphicsCard = tcg_class_graphicsCard
-componentClassToOID ComponentSoundCard = tcg_class_soundCard
-componentClassToOID ComponentOpticalDrive = tcg_class_opticalDrive
-componentClassToOID ComponentKeyboard = tcg_class_keyboard
-componentClassToOID ComponentMouse = tcg_class_mouse
-componentClassToOID ComponentDisplay = tcg_class_display
-componentClassToOID ComponentSpeaker = tcg_class_speaker
-componentClassToOID ComponentMicrophone = tcg_class_microphone
-componentClassToOID ComponentCamera = tcg_class_camera
-componentClassToOID ComponentTouchscreen = tcg_class_touchscreen
-componentClassToOID ComponentFingerprint = tcg_class_fingerprint
-componentClassToOID ComponentBluetooth = tcg_class_bluetooth
-componentClassToOID ComponentWifi = tcg_class_wifi
-componentClassToOID ComponentEthernet = tcg_class_ethernet
-componentClassToOID ComponentUSB = tcg_class_usb
-componentClassToOID ComponentFireWire = tcg_class_firewire
-componentClassToOID ComponentSCSI = tcg_class_scsi
-componentClassToOID ComponentIDE = tcg_class_ide
-componentClassToOID (ComponentOther oid) = oid
-
--- Helper function to convert OID to ComponentClass
-oidToComponentClass :: OID -> ComponentClass
-oidToComponentClass oid
-  | oid == tcg_class_motherboard = ComponentMotherboard
-  | oid == tcg_class_cpu = ComponentCPU
-  | oid == tcg_class_memory = ComponentMemory
-  | oid == tcg_class_hardDrive = ComponentHardDrive
-  | oid == tcg_class_networkInterface = ComponentNetworkInterface
-  | oid == tcg_class_graphicsCard = ComponentGraphicsCard
-  | oid == tcg_class_soundCard = ComponentSoundCard
-  | oid == tcg_class_opticalDrive = ComponentOpticalDrive
-  | oid == tcg_class_keyboard = ComponentKeyboard
-  | oid == tcg_class_mouse = ComponentMouse
-  | oid == tcg_class_display = ComponentDisplay
-  | oid == tcg_class_speaker = ComponentSpeaker
-  | oid == tcg_class_microphone = ComponentMicrophone
-  | oid == tcg_class_camera = ComponentCamera
-  | oid == tcg_class_touchscreen = ComponentTouchscreen
-  | oid == tcg_class_fingerprint = ComponentFingerprint
-  | oid == tcg_class_bluetooth = ComponentBluetooth
-  | oid == tcg_class_wifi = ComponentWifi
-  | oid == tcg_class_ethernet = ComponentEthernet
-  | oid == tcg_class_usb = ComponentUSB
-  | oid == tcg_class_firewire = ComponentFireWire
-  | oid == tcg_class_scsi = ComponentSCSI
-  | oid == tcg_class_ide = ComponentIDE
-  | otherwise = ComponentOther oid
 
 -- ASN.1 instances will be implemented in a separate phase
 -- instance ASN1Object ComponentIdentifier where ...

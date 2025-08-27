@@ -1,5 +1,4 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE InstanceSigs #-}
 
 -- |
 -- Module      : Data.X509.TCG.Attributes
@@ -10,61 +9,61 @@
 --
 -- TCG Platform Certificate attributes and attribute processing.
 --
--- This module implements the specific attributes defined in the IWG Platform 
--- Certificate Profile v1.1, including Platform Configuration, Component 
+-- This module implements the specific attributes defined in the IWG Platform
+-- Certificate Profile v1.1, including Platform Configuration, Component
 -- Identification, and TPM-related attributes.
 module Data.X509.TCG.Attributes
   ( -- * TCG Attribute Types
     TCGAttribute (..),
     TCGAttributeValue (..),
-    
+
     -- * Platform Configuration Attributes
     PlatformConfigurationAttr (..),
     PlatformConfigurationV2Attr (..),
-    
+
     -- * Component Attributes
     ComponentIdentifierAttr (..),
     ComponentIdentifierV2Attr (..),
     ComponentClassAttr (..),
-    
+
     -- * Platform Information Attributes
     PlatformManufacturerAttr (..),
     PlatformModelAttr (..),
     PlatformSerialAttr (..),
     PlatformVersionAttr (..),
-    
+
     -- * TPM Attributes
     TPMModelAttr (..),
     TPMVersionAttr (..),
     TPMSpecificationAttr (..),
-    
+
     -- * Certificate Extension Attributes
     RelevantCredentialsAttr (..),
     RelevantManifestsAttr (..),
     VirtualPlatformAttr (..),
     MultiTenantAttr (..),
-    
+
     -- * Attribute Parsing and Encoding
     parseTCGAttribute,
     encodeTCGAttribute,
     lookupTCGAttribute,
     validateTCGAttributes,
-    
+
     -- * Attribute Utilities
     attributeOIDToType,
     attributeTypeToOID,
     isRequiredAttribute,
     isCriticalAttribute,
-  ) where
+  )
+where
 
+import Data.ASN1.Types
 import qualified Data.ByteString as B
 import qualified Data.Map.Strict as Map
-import Data.ASN1.Types
-import Data.ASN1.Parse
-import Data.X509.Attribute (AttributeType(..), AttributeValue(..), Attribute(..))
+import Data.X509.Attribute (Attribute (..), AttributeValue)
+import Data.X509.TCG.Component (ComponentClass, ComponentIdentifier, ComponentIdentifierV2)
 import Data.X509.TCG.OID
-import Data.X509.TCG.Component (ComponentIdentifier, ComponentIdentifierV2, ComponentClass)
-import Data.X509.TCG.Platform (PlatformConfiguration, PlatformConfigurationV2, TPMInfo, TPMVersion, TPMSpecification)
+import Data.X509.TCG.Platform (PlatformConfiguration, PlatformConfigurationV2, TPMSpecification, TPMVersion)
 
 -- | TCG Attribute enumeration
 --
@@ -86,7 +85,8 @@ data TCGAttribute
   | TCGRelevantManifests RelevantManifestsAttr
   | TCGVirtualPlatform VirtualPlatformAttr
   | TCGMultiTenant MultiTenantAttr
-  | TCGOtherAttribute OID B.ByteString  -- ^ For unknown/custom attributes
+  | -- | For unknown/custom attributes
+    TCGOtherAttribute OID B.ByteString
   deriving (Show, Eq)
 
 -- | TCG Attribute Value wrapper
@@ -228,40 +228,41 @@ type AttributeParser = [[AttributeValue]] -> Either String TCGAttribute
 -- This registry-based approach replaces the long conditional chain
 -- with a more maintainable and extensible lookup table.
 attributeParserRegistry :: Map.Map OID AttributeParser
-attributeParserRegistry = Map.fromList
-  [ (tcg_at_platformConfiguration, parsePlatformConfigAttr)
-  , (tcg_at_platformConfiguration_v2, parsePlatformConfigV2Attr)
-  , (tcg_at_componentIdentifier, parseComponentIdAttr)
-  , (tcg_at_componentIdentifier_v2, parseComponentIdV2Attr)
-  , (tcg_at_componentClass, parseComponentClassAttr)
-  , (tcg_at_platformManufacturer, parsePlatformMfgAttr)
-  , (tcg_at_platformModel, parsePlatformModelAttr)
-  , (tcg_at_platformSerial, parsePlatformSerialAttr)
-  , (tcg_at_platformVersion, parsePlatformVersionAttr)
-  , (tcg_at_tpmModel, parseTPMModelAttr)
-  , (tcg_at_tpmVersion, parseTPMVersionAttr)
-  , (tcg_at_tpmSpecification, parseTPMSpecAttr)
-  , (tcg_ce_relevantCredentials, parseRelevantCredAttr)
-  , (tcg_ce_relevantManifests, parseRelevantManiAttr)
-  , (tcg_ce_virtualPlatform, parseVirtualPlatAttr)
-  , (tcg_ce_multiTenant, parseMultiTenantAttr)
-  ]
+attributeParserRegistry =
+  Map.fromList
+    [ (tcg_at_platformConfiguration, parsePlatformConfigAttr),
+      (tcg_at_platformConfiguration_v2, parsePlatformConfigV2Attr),
+      (tcg_at_componentIdentifier, parseComponentIdAttr),
+      (tcg_at_componentIdentifier_v2, parseComponentIdV2Attr),
+      (tcg_at_componentClass, parseComponentClassAttr),
+      (tcg_at_platformManufacturer, parsePlatformMfgAttr),
+      (tcg_at_platformModel, parsePlatformModelAttr),
+      (tcg_at_platformSerial, parsePlatformSerialAttr),
+      (tcg_at_platformVersion, parsePlatformVersionAttr),
+      (tcg_at_tpmModel, parseTPMModelAttr),
+      (tcg_at_tpmVersion, parseTPMVersionAttr),
+      (tcg_at_tpmSpecification, parseTPMSpecAttr),
+      (tcg_ce_relevantCredentials, parseRelevantCredAttr),
+      (tcg_ce_relevantManifests, parseRelevantManiAttr),
+      (tcg_ce_virtualPlatform, parseVirtualPlatAttr),
+      (tcg_ce_multiTenant, parseMultiTenantAttr)
+    ]
 
 -- | Parse a TCG attribute from an ASN.1 Attribute using registry lookup
 --
 -- This function uses the registry pattern to dispatch parsing based on OID,
 -- making it easy to add new attribute types by simply adding entries to the registry.
 parseTCGAttribute :: Attribute -> Either String TCGAttribute
-parseTCGAttribute attr = 
+parseTCGAttribute attr =
   let oid = attrType attr
       values = attrValues attr
-  in case Map.lookup oid attributeParserRegistry of
-       Just parser -> parser values
-       Nothing -> parseOtherAttr oid values  -- Fallback for unknown attributes
+   in case Map.lookup oid attributeParserRegistry of
+        Just parser -> parser values
+        Nothing -> parseOtherAttr oid values -- Fallback for unknown attributes
 
 -- | Encode a TCG attribute to an ASN.1 Attribute
 encodeTCGAttribute :: TCGAttribute -> Attribute
-encodeTCGAttribute tcgAttr = 
+encodeTCGAttribute tcgAttr =
   case tcgAttr of
     TCGPlatformConfiguration attr -> encodeAttribute tcg_at_platformConfiguration [encodePlatformConfigAttr attr]
     TCGPlatformConfigurationV2 attr -> encodeAttribute tcg_at_platformConfiguration_v2 [encodePlatformConfigV2Attr attr]
@@ -283,10 +284,10 @@ encodeTCGAttribute tcgAttr =
 
 -- | Lookup a TCG attribute by OID in a list of attributes
 lookupTCGAttribute :: OID -> [Attribute] -> Maybe TCGAttribute
-lookupTCGAttribute targetOID attrs = 
+lookupTCGAttribute targetOID attrs =
   case filter (matchesOID targetOID) attrs of
     [] -> Nothing
-    (attr:_) -> case parseTCGAttribute attr of
+    (attr : _) -> case parseTCGAttribute attr of
       Right tcgAttr -> Just tcgAttr
       Left _ -> Nothing
   where
@@ -295,9 +296,9 @@ lookupTCGAttribute targetOID attrs =
 
 -- | Validate a list of TCG attributes for compliance
 validateTCGAttributes :: [TCGAttribute] -> [String]
-validateTCGAttributes attrs = 
-  checkRequiredAttributes attrs ++ 
-  concatMap validateSingleAttribute attrs
+validateTCGAttributes attrs =
+  checkRequiredAttributes attrs
+    ++ concatMap validateSingleAttribute attrs
 
 -- * Attribute Utilities
 
@@ -320,7 +321,7 @@ attributeOIDToType oid
 
 -- | Convert TCG attribute type to OID
 attributeTypeToOID :: String -> Maybe OID
-attributeTypeToOID typeName = 
+attributeTypeToOID typeName =
   case typeName of
     "platformConfiguration" -> Just tcg_at_platformConfiguration
     "platformConfiguration_v2" -> Just tcg_at_platformConfiguration_v2
@@ -340,18 +341,18 @@ attributeTypeToOID typeName =
 isRequiredAttribute :: OID -> Bool
 isRequiredAttribute oid = oid `elem` requiredAttributes
   where
-    requiredAttributes = 
-      [ tcg_at_platformConfiguration_v2
-      , tcg_at_componentIdentifier_v2
+    requiredAttributes =
+      [ tcg_at_platformConfiguration_v2,
+        tcg_at_componentIdentifier_v2
       ]
 
 -- | Check if an attribute is marked as critical
 isCriticalAttribute :: OID -> Bool
 isCriticalAttribute oid = oid `elem` criticalAttributes
   where
-    criticalAttributes = 
-      [ tcg_ce_relevantCredentials
-      , tcg_ce_relevantManifests
+    criticalAttributes =
+      [ tcg_ce_relevantCredentials,
+        tcg_ce_relevantManifests
       ]
 
 -- Helper functions for parsing individual attribute types
@@ -469,16 +470,16 @@ encodeMultiTenantAttr _ = [OctetString B.empty] -- TODO: Implement encoding
 -- Helper functions for validation
 
 checkRequiredAttributes :: [TCGAttribute] -> [String]
-checkRequiredAttributes attrs = 
+checkRequiredAttributes attrs =
   let presentOIDs = map getAttributeOID attrs
       missingRequired = filter (`notElem` presentOIDs) requiredAttributeOIDs
-  in map (\oid -> "Missing required attribute: " ++ attributeOIDToType oid) missingRequired
+   in map (\oid -> "Missing required attribute: " ++ attributeOIDToType oid) missingRequired
   where
-    requiredAttributeOIDs = 
-      [ tcg_at_platformConfiguration_v2
-      , tcg_at_componentIdentifier_v2
+    requiredAttributeOIDs =
+      [ tcg_at_platformConfiguration_v2,
+        tcg_at_componentIdentifier_v2
       ]
-    
+
     getAttributeOID :: TCGAttribute -> OID
     getAttributeOID attr = case attr of
       TCGPlatformConfiguration _ -> tcg_at_platformConfiguration
@@ -500,7 +501,7 @@ checkRequiredAttributes attrs =
       TCGOtherAttribute oid _ -> oid
 
 validateSingleAttribute :: TCGAttribute -> [String]
-validateSingleAttribute attr = 
+validateSingleAttribute attr =
   case attr of
     TCGPlatformManufacturer (PlatformManufacturerAttr bs) ->
       if B.null bs then ["Platform Manufacturer cannot be empty"] else []

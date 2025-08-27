@@ -99,8 +99,8 @@ module Data.X509.TCG
   ) where
 
 import qualified Data.ByteString as B
-import Data.X509 (SignedCertificate, Certificate, DistinguishedName(..))
-import Data.X509.Attribute (Attributes, Attribute)
+import Data.X509 (DistinguishedName(..))
+import Data.X509.Attribute (Attributes)
 import Data.X509.TCG.Platform
 import Data.X509.TCG.Delta  
 import Data.X509.TCG.Component
@@ -186,7 +186,7 @@ getCurrentPlatformConfiguration (Left platCert) =
     convertComponents :: [ComponentIdentifier] -> [ComponentIdentifierV2] 
     convertComponents _ = [] -- TODO: Implement component conversion
 
-getCurrentPlatformConfiguration (Right deltaCert) = 
+getCurrentPlatformConfiguration (Right _deltaCert) = 
   -- For delta certificates, we need the base certificate to compute current configuration
   Nothing -- TODO: Implement delta application
 
