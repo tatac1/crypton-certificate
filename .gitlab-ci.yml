@@ -1,0 +1,48 @@
+image: haskell:9.4
+
+variables:
+  GHC_VERSION: "9.4.8"
+  STACK_ROOT: "${CI_PROJECT_DIR}/.stack"
+
+cache:
+  key: "${CI_COMMIT_REF_SLUG}-ghc-${GHC_VERSION}"
+  paths:
+    - .stack/
+    - .stack-work/
+
+stages:
+  - build
+  - test
+  - lint
+
+before_script:
+  - apt-get update -qq
+  - apt-get install -y -qq git
+  - stack --version
+  - stack setup
+
+build:
+  stage: build
+  script:
+    - stack build --test --no-run-tests --fast
+  artifacts:
+    expire_in: 1 hour
+    paths:
+      - .stack-work/
+
+test:
+  stage: test
+  script:
+    - stack test
+  dependencies:
+    - build
+  coverage: '/(\d+\%).*in.*expressions/'
+
+lint:
+  stage: lint
+  script:
+    - stack install hlint
+    - stack exec hlint -- .
+  dependencies:
+    - build
+  allow_failure: true
