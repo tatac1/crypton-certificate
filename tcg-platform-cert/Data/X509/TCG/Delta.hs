@@ -240,10 +240,65 @@ getDeltaPlatformCertificate :: SignedDeltaPlatformCertificate -> DeltaPlatformCe
 getDeltaPlatformCertificate = signedObject . getSigned
 
 -- | Extract the base certificate reference from a Delta Platform Certificate
+--
+-- This function retrieves the reference to the base Platform Certificate
+-- that this Delta Certificate applies to. The base certificate reference
+-- includes the issuer DN, serial number, and optionally a certificate hash
+-- and validity period for additional verification.
+--
+-- The base certificate reference is essential for:
+-- * Validating that the Delta Certificate applies to the correct base certificate
+-- * Building certificate chains from base to current state
+-- * Ensuring continuity in platform configuration tracking
+--
+-- Parameters:
+-- * @cert@ - The signed Delta Platform Certificate
+--
+-- Returns:
+-- * @BasePlatformCertificateRef@ containing issuer, serial number, and optional hash/validity
+--
+-- Example:
+-- @
+-- let baseRef = getBaseCertificateReference deltaCert
+-- case validateBaseCertificate baseRef of
+--   [] -> putStrLn $ \"Base certificate serial: \" ++ show (bpcrSerialNumber baseRef)
+--   errors -> putStrLn $ \"Invalid base reference: \" ++ unlines errors
+-- @
 getBaseCertificateReference :: SignedDeltaPlatformCertificate -> BasePlatformCertificateRef
 getBaseCertificateReference cert = dpciBaseCertificateRef $ getDeltaPlatformCertificate cert
 
 -- | Extract Platform Configuration Delta from a Delta Platform Certificate
+--
+-- This function searches for the tcg-at-deltaConfiguration attribute
+-- (OID 2.23.133.2.23) and parses it into a structured PlatformConfigurationDelta.
+--
+-- The platform configuration delta provides detailed information about:
+-- * Changes to platform information (manufacturer, model, etc.)
+-- * Component additions, removals, modifications, and updates
+-- * Change records with timestamps and metadata
+-- * Affected component lists and change tracking
+--
+-- This information is essential for:
+-- * Applying delta changes to a base platform configuration  
+-- * Tracking platform evolution over time
+-- * Validating that changes are authorized and properly documented
+-- * Building audit trails of platform modifications
+--
+-- Parameters:
+-- * @cert@ - The signed Delta Platform Certificate to extract delta from
+--
+-- Returns:
+-- * @Just PlatformConfigurationDelta@ if the delta configuration is found and valid
+-- * @Nothing@ if the delta configuration attribute is missing or malformed
+--
+-- Example:
+-- @
+-- case getPlatformConfigurationDelta deltaCert of
+--   Just delta -> do
+--     putStrLn $ \"Component changes: \" ++ show (length $ pcdComponentDeltas delta)
+--     putStrLn $ \"Change records: \" ++ show (length $ pcdChangeRecords delta)
+--   Nothing -> putStrLn \"No delta configuration found in certificate\"
+-- @
 getPlatformConfigurationDelta :: SignedDeltaPlatformCertificate -> Maybe PlatformConfigurationDelta
 getPlatformConfigurationDelta cert = 
   case lookupDeltaAttribute "2.23.133.2.23" (dpciAttributes $ getDeltaPlatformCertificate cert) of
@@ -278,7 +333,36 @@ validateDeltaCertificate cert =
 
 -- | Apply a Delta Platform Certificate to a base configuration
 --
--- Computes the resulting platform configuration after applying the delta.
+-- This function computes the resulting platform configuration after applying
+-- all component deltas from a Delta Platform Certificate to a base configuration.
+-- It processes each component delta operation in sequence to produce the final state.
+--
+-- The function handles the following delta operations:
+-- * @DeltaAdd@ - Adds new components to the platform
+-- * @DeltaRemove@ - Removes existing components from the platform
+-- * @DeltaModify@ - Updates existing components (firmware updates, etc.)
+-- * @DeltaReplace@ - Replaces one component with another
+-- * @DeltaUpdate@ - Updates component configuration or properties
+--
+-- The operations are applied atomically - either all succeed or the function
+-- returns an error. This ensures platform configuration consistency.
+--
+-- Parameters:
+-- * @baseConfig@ - The base platform configuration to apply changes to
+-- * @delta@ - The platform configuration delta containing the changes
+--
+-- Returns:
+-- * @Right PlatformConfigurationV2@ - The resulting configuration after applying all changes
+-- * @Left String@ - An error message if any delta operation fails or is invalid
+--
+-- Example:
+-- @
+-- case applyDeltaToBase baseConfig platformDelta of
+--   Right newConfig -> do
+--     putStrLn $ \"Applied \" ++ show (length $ pcdComponentDeltas platformDelta) ++ \" changes\"
+--     putStrLn $ \"Final components: \" ++ show (length $ pcv2Components newConfig)
+--   Left error -> putStrLn $ \"Failed to apply delta: \" ++ error
+-- @
 applyDeltaToBase :: PlatformConfigurationV2 -> PlatformConfigurationDelta -> Either String PlatformConfigurationV2
 applyDeltaToBase baseConfig delta = 
   Right $ foldl applyComponentDelta baseConfig (pcdComponentDeltas delta)
