@@ -58,6 +58,7 @@ module Data.X509.TCG.Attributes
   ) where
 
 import qualified Data.ByteString as B
+import qualified Data.Map.Strict as Map
 import Data.ASN1.Types
 import Data.ASN1.Parse
 import Data.X509.Attribute (AttributeType(..), AttributeValue(..), Attribute(..))
@@ -217,32 +218,46 @@ data MultiTenantAttr = MultiTenantAttr
   }
   deriving (Show, Eq)
 
--- * Attribute Parsing and Encoding
+-- * Registry-based Attribute Parsing
 
--- | Parse a TCG attribute from an ASN.1 Attribute
+-- | Type alias for attribute parser functions
+type AttributeParser = [[AttributeValue]] -> Either String TCGAttribute
+
+-- | Registry mapping OIDs to their corresponding parser functions
+--
+-- This registry-based approach replaces the long conditional chain
+-- with a more maintainable and extensible lookup table.
+attributeParserRegistry :: Map.Map OID AttributeParser
+attributeParserRegistry = Map.fromList
+  [ (tcg_at_platformConfiguration, parsePlatformConfigAttr)
+  , (tcg_at_platformConfiguration_v2, parsePlatformConfigV2Attr)
+  , (tcg_at_componentIdentifier, parseComponentIdAttr)
+  , (tcg_at_componentIdentifier_v2, parseComponentIdV2Attr)
+  , (tcg_at_componentClass, parseComponentClassAttr)
+  , (tcg_at_platformManufacturer, parsePlatformMfgAttr)
+  , (tcg_at_platformModel, parsePlatformModelAttr)
+  , (tcg_at_platformSerial, parsePlatformSerialAttr)
+  , (tcg_at_platformVersion, parsePlatformVersionAttr)
+  , (tcg_at_tpmModel, parseTPMModelAttr)
+  , (tcg_at_tpmVersion, parseTPMVersionAttr)
+  , (tcg_at_tpmSpecification, parseTPMSpecAttr)
+  , (tcg_ce_relevantCredentials, parseRelevantCredAttr)
+  , (tcg_ce_relevantManifests, parseRelevantManiAttr)
+  , (tcg_ce_virtualPlatform, parseVirtualPlatAttr)
+  , (tcg_ce_multiTenant, parseMultiTenantAttr)
+  ]
+
+-- | Parse a TCG attribute from an ASN.1 Attribute using registry lookup
+--
+-- This function uses the registry pattern to dispatch parsing based on OID,
+-- making it easy to add new attribute types by simply adding entries to the registry.
 parseTCGAttribute :: Attribute -> Either String TCGAttribute
 parseTCGAttribute attr = 
-  parseByOID (attrType attr) (attrValues attr)
-  where
-    parseByOID :: OID -> [[AttributeValue]] -> Either String TCGAttribute
-    parseByOID oid values
-      | oid == tcg_at_platformConfiguration = parsePlatformConfigAttr values
-      | oid == tcg_at_platformConfiguration_v2 = parsePlatformConfigV2Attr values
-      | oid == tcg_at_componentIdentifier = parseComponentIdAttr values
-      | oid == tcg_at_componentIdentifier_v2 = parseComponentIdV2Attr values
-      | oid == tcg_at_componentClass = parseComponentClassAttr values
-      | oid == tcg_at_platformManufacturer = parsePlatformMfgAttr values
-      | oid == tcg_at_platformModel = parsePlatformModelAttr values
-      | oid == tcg_at_platformSerial = parsePlatformSerialAttr values
-      | oid == tcg_at_platformVersion = parsePlatformVersionAttr values
-      | oid == tcg_at_tpmModel = parseTPMModelAttr values
-      | oid == tcg_at_tpmVersion = parseTPMVersionAttr values
-      | oid == tcg_at_tpmSpecification = parseTPMSpecAttr values
-      | oid == tcg_ce_relevantCredentials = parseRelevantCredAttr values
-      | oid == tcg_ce_relevantManifests = parseRelevantManiAttr values
-      | oid == tcg_ce_virtualPlatform = parseVirtualPlatAttr values
-      | oid == tcg_ce_multiTenant = parseMultiTenantAttr values
-      | otherwise = parseOtherAttr oid values
+  let oid = attrType attr
+      values = attrValues attr
+  in case Map.lookup oid attributeParserRegistry of
+       Just parser -> parser values
+       Nothing -> parseOtherAttr oid values  -- Fallback for unknown attributes
 
 -- | Encode a TCG attribute to an ASN.1 Attribute
 encodeTCGAttribute :: TCGAttribute -> Attribute

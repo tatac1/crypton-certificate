@@ -42,6 +42,7 @@ module Data.X509.TCG.Component
   ) where
 
 import qualified Data.ByteString as B
+import qualified Data.Map.Strict as Map
 import Data.ASN1.Types
 import Data.ASN1.Parse
 import Data.X509.TCG.OID

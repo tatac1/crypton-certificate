@@ -175,7 +175,22 @@ getPlatformCertificate = signedObject . getSigned
 
 -- | Extract Platform Configuration from a Platform Certificate
 --
--- Looks for the tcg-at-platformConfiguration attribute and parses it.
+-- This function searches for the tcg-at-platformConfiguration attribute
+-- (OID 2.23.133.2.1) and parses it into a structured PlatformConfiguration.
+--
+-- The platform configuration provides detailed information about:
+-- * Platform manufacturer, model, version, and serial number  
+-- * Complete list of platform components with their identifiers
+-- * Component hierarchy and relationships
+--
+-- Example usage:
+-- @
+-- case getPlatformConfiguration cert of
+--   Just config -> do
+--     putStrLn $ "Platform: " ++ B.unpack (pcManufacturer config)
+--     putStrLn $ "Components: " ++ show (length $ pcComponents config)
+--   Nothing -> putStrLn "No platform configuration found in certificate"
+-- @
 getPlatformConfiguration :: SignedPlatformCertificate -> Maybe PlatformConfiguration
 getPlatformConfiguration cert = 
   case lookupAttribute "2.23.133.2.1" (pciAttributes $ getPlatformCertificate cert) of
@@ -213,13 +228,39 @@ getComponentStatus cert = do
   config <- getPlatformConfigurationV2 cert
   return $ pcv2Components config
 
--- Helper functions
+-- * Helper Functions
 
--- | Lookup attribute by OID string
+-- | Lookup an attribute value by OID string
+--
+-- This function searches through the attributes list to find an attribute
+-- with the specified OID and returns its value if found.
+--
+-- Example:
+-- @
+-- case lookupAttribute "2.23.133.2.1" platformAttrs of
+--   Just value -> processPlatformConfig value
+--   Nothing -> handleMissingConfig
+-- @
 lookupAttribute :: String -> Attributes -> Maybe AttributeValue
 lookupAttribute _ _ = Nothing -- TODO: Implement attribute lookup
 
--- | Lookup attribute value as ByteString by OID  
+-- | Extract attribute value as ByteString by OID
+--
+-- This function combines attribute lookup with ByteString extraction,
+-- providing a convenient way to access string-based attribute values.
+--
+-- Parameters:
+-- * @oid@ - The OID string to search for
+-- * @attrs@ - The attributes list to search in
+--
+-- Returns:
+-- * @Just ByteString@ if the attribute is found and contains a valid string
+-- * @Nothing@ if the attribute is missing or has invalid format
+--
+-- Example:
+-- @
+-- manufacturerName <- lookupAttributeValue "2.23.133.2.2" attrs
+-- @
 lookupAttributeValue :: String -> Attributes -> Maybe B.ByteString
 lookupAttributeValue oid attrs = do
   attrVal <- lookupAttribute oid attrs
