@@ -6,6 +6,7 @@ packages:
 - x509-system
 - x509-validation
 - x509-util
+- tcg-platform-cert
 
 nix:
   pure: false
