@@ -4,7 +4,7 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import qualified Data.ByteString.Char8 as B
 import Data.X509.TCG.Delta
-import Data.X509.TCG.Platform
+import Data.X509.TCG.Platform()
 import Data.X509.TCG.Component
 
 tests :: TestTree

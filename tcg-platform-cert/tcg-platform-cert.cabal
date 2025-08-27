@@ -73,6 +73,8 @@ test-suite test-tcg-platform-cert
     , Tests.Delta
     , Tests.OID
     , Tests.Platform
+    , Tests.Properties
+    , Tests.Arbitrary
 
   build-depends:
       tcg-platform-cert

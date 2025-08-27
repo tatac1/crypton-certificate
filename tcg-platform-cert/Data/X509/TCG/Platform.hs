@@ -292,7 +292,26 @@ parseTPMVersion _ = Nothing -- TODO: Implement TPM version parsing
 parseTPMSpecification :: B.ByteString -> Maybe TPMSpecification
 parseTPMSpecification _ = Nothing -- TODO: Implement TPM specification parsing
 
--- ASN.1 instances will be implemented in a separate phase
--- instance ASN1Object PlatformCertificateInfo where ...
--- instance ASN1Object PlatformConfiguration where ...
--- instance ASN1Object PlatformConfigurationV2 where ...
+-- ASN.1 instances for basic types
+
+instance ASN1Object TPMVersion where
+  toASN1 (TPMVersion major minor revMajor revMinor) xs =
+    [Start Sequence, IntVal (fromIntegral major), IntVal (fromIntegral minor), 
+     IntVal (fromIntegral revMajor), IntVal (fromIntegral revMinor), End Sequence] ++ xs
+  fromASN1 (Start Sequence : IntVal major : IntVal minor : IntVal revMajor : IntVal revMinor : End Sequence : xs) =
+    Right (TPMVersion (fromIntegral major) (fromIntegral minor) (fromIntegral revMajor) (fromIntegral revMinor), xs)
+  fromASN1 _ = Left "TPMVersion: Invalid ASN1 structure"
+
+instance ASN1Object TPMSpecification where  
+  toASN1 (TPMSpecification family level revision) xs =
+    [Start Sequence, OctetString family, IntVal (fromIntegral level), IntVal (fromIntegral revision), End Sequence] ++ xs
+  fromASN1 (Start Sequence : OctetString family : IntVal level : IntVal revision : End Sequence : xs) =
+    Right (TPMSpecification family (fromIntegral level) (fromIntegral revision), xs)
+  fromASN1 _ = Left "TPMSpecification: Invalid ASN1 structure"
+
+instance ASN1Object ComponentStatus where
+  toASN1 status xs = [IntVal (fromIntegral $ fromEnum status)] ++ xs
+  fromASN1 (IntVal n : xs) 
+    | n >= 0 && n <= 3 = Right (toEnum (fromIntegral n), xs)
+    | otherwise = Left "ComponentStatus: Invalid enum value"
+  fromASN1 _ = Left "ComponentStatus: Invalid ASN1 structure"
