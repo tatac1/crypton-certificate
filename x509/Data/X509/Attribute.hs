@@ -44,6 +44,8 @@ module Data.X509.Attribute
     ClassListFlag (..),
     SecurityCategory (..),
     GeneralName,
+    encodeGeneralNames,
+    parseGeneralNames,
 
     -- * OIDs
     oid_Role,
@@ -55,15 +57,17 @@ module Data.X509.Attribute
   )
 where
 
+import Control.Monad (when)
 import Data.ASN1.BitArray
 import Data.ASN1.Parse
 import Data.ASN1.Types
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
-import Data.List (find)
+import Data.List (find, nub)
 import Data.Maybe (fromMaybe)
 import Data.Proxy
-import Data.X509.Ext (AltName (..), encodeGeneralNames, parseGeneralNames)
+import Data.X509.Ext (AltName (..))
+import Data.X509.Internal (asn1Container)
 
 type GeneralName = AltName
 
@@ -87,7 +91,20 @@ type AttributeValue = ASN1
 
 instance ASN1Object Attributes where
   fromASN1 :: [ASN1] -> Either String (Attributes, [ASN1])
-  fromASN1 = runParseASN1State (Attributes <$> onNextContainer Sequence (getMany parseAttribute))
+  fromASN1 = runParseASN1State $ onNextContainer Sequence $ do
+    attrs <- getMany parseAttribute
+    -- Constraint: attributes field MUST NOT be empty.
+    when (null attrs) $
+      throwParseError "Attributes field MUST contain at least one attribute"
+    -- Constraint: attribute types MUST be unique.
+    let oids = map attrType attrs
+    when (hasDuplicates oids) $
+      throwParseError "Attribute types MUST be unique"
+    return $ Attributes attrs
+    where
+      hasDuplicates :: (Ord a) => [a] -> Bool
+      hasDuplicates list = length (nub list) /= length list
+
   toASN1 :: Attributes -> ASN1S
   toASN1 (Attributes attrs) rest = [Start Sequence] ++ concatMap encodeAttributeASN1 attrs ++ [End Sequence] ++ rest
 
@@ -97,11 +114,7 @@ instance ASN1Object Attributes where
 parseAttribute :: ParseASN1 Attribute
 parseAttribute = onNextContainer Sequence $ do
   oid <- getNextOID
-  -- The SET OF contains multiple values. Each value is a full ASN.1 structure.
-  -- We parse each value as a self-contained sequence of ASN.1 tokens.
-  -- This assumes that complex attribute values are encoded as sequences,
-  -- which is true for all currently supported types in this library.
-  vals <- onNextContainer Set (getMany (getNextContainer Sequence))
+  vals <- onNextContainer Set (getMany (onNextContainer Sequence (getMany getNext)))
   if null vals
     then throwParseError "Attribute values SET OF cannot be empty"
     else return $ Attribute oid vals
@@ -125,11 +138,18 @@ class IsAttribute a where
   -- | The OID associated with this attribute type.
   attrOID :: Proxy a -> OID
 
+  -- | A parser for the attribute value.
+  attrParser :: Proxy a -> ParseASN1 a
+
   -- | Decode a single attribute value (a full ASN1 structure).
   attrDecode :: [AttributeValue] -> Either String a
+  attrDecode asn1s = case runParseASN1State (attrParser (Proxy @a)) asn1s of
+    Left err -> Left err
+    Right (x, []) -> Right x
+    Right (_, rest) -> Left ("Unexpected data after parsing: " ++ show rest)
 
-  -- | Encode a value into a single attribute value (a full ASN1 structure).
-  attrEncode :: a -> [AttributeValue]
+  -- | Encode a value into a set of attribute values.
+  attrEncode :: a -> [[AttributeValue]]
 
 -- | Get a specific attribute from a list of attributes.
 -- This returns a list of decoded attribute values.
@@ -160,7 +180,7 @@ decodeAttribute attr
 -- | Encode a specific attribute type into a raw 'Attribute'.
 encodeAttribute :: forall a. (IsAttribute a) => [a] -> Attribute
 encodeAttribute values =
-  Attribute (attrOID (Proxy @a)) (map attrEncode values)
+  Attribute (attrOID (Proxy @a)) (concatMap attrEncode values)
 
 -- OIDs from RFC 5755
 id_pkix :: OID
@@ -226,30 +246,20 @@ data RoleSyntax = RoleSyntax
   deriving (Show, Eq)
 
 instance IsAttribute Attr_Role where
-  attrOID :: Proxy Attr_Role -> OID
   attrOID _ = oid_Role
-  attrDecode :: [AttributeValue] -> Either String Attr_Role
-  attrDecode asn1s = case runParseASN1State (Attr_Role <$> parseRoleSyntax) asn1s of
-    Left err -> Left err
-    Right (x, []) -> Right x
-    Right (_, rest) -> Left ("Unexpected data after parsing: " ++ show rest)
-  attrEncode :: Attr_Role -> [AttributeValue]
-  attrEncode (Attr_Role rs) = encodeRoleSyntax rs
+  attrParser _ = Attr_Role <$> parseRoleSyntax
+  attrEncode (Attr_Role rs) = [encodeRoleSyntax rs]
 
 parseRoleSyntax :: ParseASN1 RoleSyntax
-parseRoleSyntax = onNextContainer Sequence $ do
+parseRoleSyntax = do
   auth <- onNextContainerMaybe (Container Context 0) parseGeneralNames
   name <- onNextContainer (Container Context 1) parseGeneralName
   return $ RoleSyntax auth name
 
 encodeRoleSyntax :: RoleSyntax -> [ASN1]
 encodeRoleSyntax (RoleSyntax auth name) =
-  [Start Sequence]
-    ++ maybe [] (\a -> [Start (Container Context 0)] ++ encodeGeneralNames a ++ [End (Container Context 0)]) auth
-    ++ [Start (Container Context 1)]
-    ++ encodeGeneralName name
-    ++ [End (Container Context 1)]
-    ++ [End Sequence]
+  maybe [] (\a -> asn1Container (Container Context 0) (encodeGeneralNames a)) auth
+    ++ asn1Container (Container Context 1) (encodeGeneralName name)
 
 -- | Service Authentication Information attribute from RFC 5755 section 4.4.1
 data SvceAuthInfo = SvceAuthInfo
@@ -260,29 +270,17 @@ data SvceAuthInfo = SvceAuthInfo
   deriving (Show, Eq)
 
 instance IsAttribute Attr_SvceAuthInfo where
-  attrOID :: Proxy Attr_SvceAuthInfo -> OID
   attrOID _ = oid_SvceAuthInfo
-  attrDecode :: [AttributeValue] -> Either String Attr_SvceAuthInfo
-  attrDecode asn1s = case runParseASN1State (Attr_SvceAuthInfo <$> parseSvceAuthInfo) asn1s of
-    Left err -> Left err
-    Right (x, []) -> Right x
-    Right (_, rest) -> Left ("Unexpected data after parsing: " ++ show rest)
-  attrEncode :: Attr_SvceAuthInfo -> [AttributeValue]
-  attrEncode (Attr_SvceAuthInfo s) = encodeSvceAuthInfo s
+  attrParser _ = Attr_SvceAuthInfo <$> parseSvceAuthInfo
+  attrEncode (Attr_SvceAuthInfo s) = [encodeSvceAuthInfo s]
 
 instance IsAttribute Attr_AccessIdentity where
-  attrOID :: Proxy Attr_AccessIdentity -> OID
   attrOID _ = oid_AccessIdentity
-  attrDecode :: [AttributeValue] -> Either String Attr_AccessIdentity
-  attrDecode asn1s = case runParseASN1State (Attr_AccessIdentity <$> parseSvceAuthInfo) asn1s of
-    Left err -> Left err
-    Right (x, []) -> Right x
-    Right (_, rest) -> Left ("Unexpected data after parsing: " ++ show rest)
-  attrEncode :: Attr_AccessIdentity -> [AttributeValue]
-  attrEncode (Attr_AccessIdentity s) = encodeSvceAuthInfo s
+  attrParser _ = Attr_AccessIdentity <$> parseSvceAuthInfo
+  attrEncode (Attr_AccessIdentity s) = [encodeSvceAuthInfo s]
 
 parseSvceAuthInfo :: ParseASN1 SvceAuthInfo
-parseSvceAuthInfo = onNextContainer Sequence $ do
+parseSvceAuthInfo = do
   service <- parseGeneralName
   ident <- parseGeneralName
   auth <- getNextMaybe (\case OctetString s -> Just s; _ -> Nothing)
@@ -290,11 +288,9 @@ parseSvceAuthInfo = onNextContainer Sequence $ do
 
 encodeSvceAuthInfo :: SvceAuthInfo -> [ASN1]
 encodeSvceAuthInfo (SvceAuthInfo service ident auth) =
-  [Start Sequence]
-    ++ encodeGeneralName service
+  encodeGeneralName service
     ++ encodeGeneralName ident
     ++ maybe [] (\bs -> [OctetString bs]) auth
-    ++ [End Sequence]
 
 -- | IETF attribute syntax from RFC 5755 section 4.4
 data IetfAttrSyntax = IetfAttrSyntax
@@ -310,32 +306,20 @@ data IetfAttrSyntaxValue
   deriving (Show, Eq)
 
 instance IsAttribute Attr_ChargingIdentity where
-  attrOID :: Proxy Attr_ChargingIdentity -> OID
   attrOID _ = oid_ChargingIdentity
-  attrDecode :: [AttributeValue] -> Either String Attr_ChargingIdentity
-  attrDecode asn1s = case runParseASN1State (Attr_ChargingIdentity <$> parseIetfAttrSyntax) asn1s of
-    Left err -> Left err
-    Right (x, []) -> Right x
-    Right (_, rest) -> Left ("Unexpected data after parsing: " ++ show rest)
-  attrEncode (Attr_ChargingIdentity s) = encodeIetfAttrSyntax s
+  attrParser _ = Attr_ChargingIdentity <$> parseIetfAttrSyntax
+  attrEncode (Attr_ChargingIdentity s) = [encodeIetfAttrSyntax s]
 
 instance IsAttribute Attr_Group where
-  attrOID :: Proxy Attr_Group -> OID
   attrOID _ = oid_Group
-  attrDecode :: [AttributeValue] -> Either String Attr_Group
-  attrDecode asn1s = case runParseASN1State (Attr_Group <$> parseIetfAttrSyntax) asn1s of
-    Left err -> Left err
-    Right (x, []) -> Right x
-    Right (_, rest) -> Left ("Unexpected data after parsing: " ++ show rest)
-  attrEncode :: Attr_Group -> [AttributeValue]
-  attrEncode (Attr_Group s) = encodeIetfAttrSyntax s
+  attrParser _ = Attr_Group <$> parseIetfAttrSyntax
+  attrEncode (Attr_Group s) = [encodeIetfAttrSyntax s]
 
 parseIetfAttrSyntax :: ParseASN1 IetfAttrSyntax
 parseIetfAttrSyntax =
-  onNextContainer Sequence $
-    IetfAttrSyntax
-      <$> onNextContainerMaybe (Container Context 0) parseGeneralNames
-      <*> onNextContainer Sequence (getMany parseIetfValue)
+  IetfAttrSyntax
+    <$> onNextContainerMaybe (Container Context 0) parseGeneralNames
+    <*> onNextContainer Sequence (getMany parseIetfValue)
 
 parseIetfValue :: ParseASN1 IetfAttrSyntaxValue
 parseIetfValue =
@@ -349,12 +333,8 @@ parseIetfValue =
 
 encodeIetfAttrSyntax :: IetfAttrSyntax -> [ASN1]
 encodeIetfAttrSyntax (IetfAttrSyntax authority values) =
-  [Start Sequence]
-    ++ maybe [] (\gns -> [Start (Container Context 0)] ++ encodeGeneralNames gns ++ [End (Container Context 0)]) authority
-    ++ [Start Sequence]
-    ++ map encodeIetfValue values
-    ++ [End Sequence]
-    ++ [End Sequence]
+  maybe [] (\gns -> asn1Container (Container Context 0) (encodeGeneralNames gns)) authority
+    ++ asn1Container Sequence (map encodeIetfValue values)
 
 encodeIetfValue :: IetfAttrSyntaxValue -> ASN1
 encodeIetfValue (IetfAttrSyntaxOctets bs) = OctetString bs
@@ -385,17 +365,12 @@ data SecurityCategory = SecurityCategory
   deriving (Show, Eq)
 
 instance IsAttribute Attr_Clearance where
-  attrOID :: Proxy Attr_Clearance -> OID
   attrOID _ = oid_Clearance
-  attrDecode :: [AttributeValue] -> Either String Attr_Clearance
-  attrDecode asn1s = case runParseASN1State (Attr_Clearance <$> parseClearance) asn1s of
-    Left err -> Left err
-    Right (x, []) -> Right x
-    Right (_, rest) -> Left ("Unexpected data after parsing: " ++ show rest)
-  attrEncode (Attr_Clearance c) = encodeClearance c
+  attrParser _ = Attr_Clearance <$> parseClearance
+  attrEncode (Attr_Clearance c) = [encodeClearance c]
 
 parseClearance :: ParseASN1 Clearance
-parseClearance = onNextContainer Sequence $ do
+parseClearance = do
   policyId <-
     getNext >>= \case
       OID o -> return o
@@ -412,11 +387,9 @@ parseSecurityCategory = onNextContainer Sequence $ do
 
 encodeClearance :: Clearance -> [ASN1]
 encodeClearance (Clearance policyId classList secCat) =
-  [Start Sequence]
-    ++ [OID policyId]
+  [OID policyId]
     ++ classListEncoding
     ++ secCatEncoding
-    ++ [End Sequence]
   where
     defaultClassListBits = flagsToBits [ClassList_unclassified]
     classListBits = flagsToBits classList
@@ -428,80 +401,40 @@ encodeClearance (Clearance policyId classList secCat) =
 encodeSecurityCategory :: SecurityCategory -> [ASN1]
 encodeSecurityCategory (SecurityCategory typ val) =
   [Start Sequence]
-    ++ [Start (Container Context 0), OID typ, End (Container Context 0)]
-    ++ [Start (Container Context 1)]
-    ++ val
-    ++ [End (Container Context 1)]
+    ++ asn1Container (Container Context 0) [OID typ]
+    ++ asn1Container (Container Context 1) val
     ++ [End Sequence]
 
 -- Helpers
 
--- from Data.X509.Ext
+encodeGeneralNames :: [GeneralName] -> [ASN1]
+encodeGeneralNames gns = [Start Sequence] ++ concatMap encodeGeneralName gns ++ [End Sequence]
+
+parseGeneralNames :: ParseASN1 [GeneralName]
+parseGeneralNames = onNextContainer Sequence (getMany parseGeneralName)
+
 parseGeneralName :: ParseASN1 AltName
-parseGeneralName = getAddr
-  where
-    getAddr = do
-      m <- onNextContainerMaybe (Container Context 0) getComposedAddr
-      maybe getSimpleAddr return m
-    getComposedAddr = do
-      n <- getNext
-      case n of
-        OID [1, 3, 6, 1, 5, 5, 7, 8, 5] -> do
-          -- xmpp addr
-          c <- getNextContainerMaybe (Container Context 0)
-          case c of
-            Just [ASN1String cs] ->
-              case asn1CharacterToString cs of
-                Nothing -> throwParseError "GeneralNames: invalid string for XMPP Addr"
-                Just s -> return $ AltNameXMPP s
-            _ ->
-              throwParseError ("GeneralNames: expecting string for XMPP Addr got: " ++ show c)
-        OID [1, 3, 6, 1, 5, 5, 7, 8, 7] -> do
-          -- DNSSRV addr
-          c <- getNextContainerMaybe (Container Context 0)
-          case c of
-            Just [ASN1String cs] ->
-              case asn1CharacterToString cs of
-                Nothing -> throwParseError "GeneralNames: invalid string for DNSSrv Addr"
-                Just s -> return $ AltNameDNSSRV s
-            _ ->
-              throwParseError
-                ("GeneralNames: expecting string for DNSSRV Addr got: " ++ show c)
-        OID unknown -> throwParseError ("GeneralNames: unknown OID " ++ show unknown)
-        _ -> throwParseError ("GeneralNames: expecting OID but got " ++ show n)
+parseGeneralName = do
+  n <- getNext
+  case n of
+    (Other Context 1 b) -> return $ AltNameRFC822 $ BC.unpack b
+    (Other Context 2 b) -> return $ AltNameDNS $ BC.unpack b
+    (Start (Container Context 4)) -> do
+      dn <- getObject
+      End (Container Context 4) <- getNext
+      return $ AltDirectoryName dn
+    (Other Context 6 b) -> return $ AltNameURI $ BC.unpack b
+    (Other Context 7 b) -> return $ AltNameIP b
+    _ -> throwParseError ("GeneralNames: not coping with unknown stream " ++ show n)
 
-    getSimpleAddr = do
-      n <- getNext
-      case n of
-        (Other Context 1 b) -> return $ AltNameRFC822 $ BC.unpack b
-        (Other Context 2 b) -> return $ AltNameDNS $ BC.unpack b
-        (Other Context 6 b) -> return $ AltNameURI $ BC.unpack b
-        (Other Context 7 b) -> return $ AltNameIP b
-        _ ->
-          throwParseError ("GeneralNames: not coping with unknown stream " ++ show n)
-
--- Corrected version of encodeAltName from Data.X509.Ext
+-- | TODO impl: AltNameXMPP, AltNameDNSSRV
 encodeGeneralName :: AltName -> [ASN1]
 encodeGeneralName (AltNameRFC822 n) = [Other Context 1 $ BC.pack n]
 encodeGeneralName (AltNameDNS n) = [Other Context 2 $ BC.pack n]
+encodeGeneralName (AltDirectoryName dn) = asn1Container (Container Context 4) (toASN1 dn [])
 encodeGeneralName (AltNameURI n) = [Other Context 6 $ BC.pack n]
 encodeGeneralName (AltNameIP n) = [Other Context 7 n]
-encodeGeneralName (AltNameXMPP n) =
-  [ Start (Container Context 0),
-    OID [1, 3, 6, 1, 5, 5, 7, 8, 5],
-    Start (Container Context 0),
-    ASN1String $ asn1CharacterString UTF8 n,
-    End (Container Context 0),
-    End (Container Context 0)
-  ]
-encodeGeneralName (AltNameDNSSRV n) =
-  [ Start (Container Context 0),
-    OID [1, 3, 6, 1, 5, 5, 7, 8, 7], -- Correct OID for DNSSRV
-    Start (Container Context 0),
-    ASN1String $ asn1CharacterString UTF8 n,
-    End (Container Context 0),
-    End (Container Context 0)
-  ]
+encodeGeneralName n = error $ "encodeGeneralName: not implemented: " ++ show n
 
 bitsToFlags :: (Enum a) => BitArray -> [a]
 bitsToFlags bits = concat $ flip map [0 .. (bitArrayLength bits - 1)] $ \i -> do

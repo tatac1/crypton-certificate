@@ -2,17 +2,33 @@
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE LambdaCase #-}
 
+-- |
+-- Module      : Data.X509.AttCert
+-- License     : BSD-style
+-- Maintainer  : Toru Tomita <toru.tomita@gmail.com>
+-- Stability   : experimental
+-- Portability : unknown
+--
+-- Internal X.509 Attribute Certificate data structures and ASN.1 processing.
+--
+-- This module contains the core data types and ASN.1 parsing/encoding logic
+-- for Attribute Certificates as defined in RFC 5755. These are low-level
+-- building blocks used by the higher-level "Data.X509AC" module.
 module Data.X509.AttCert where
 
+import Control.Monad (when)
 import Data.ASN1.BitArray
 import Data.ASN1.Parse
 import Data.ASN1.Types
 import qualified Data.ByteString as B
 import Data.Hourglass (DateTime)
+import Data.Maybe (isJust)
 import Data.X509.AlgorithmIdentifier
-import Data.X509.Attribute (Attributes)
-import Data.X509.Ext (AltName, encodeGeneralNames, parseGeneralNames)
+import Data.X509.Attribute
+import Data.X509.DistinguishedName (DistinguishedName (..))
+import Data.X509.Ext (AltName (..))
 import Data.X509.ExtensionRaw
+import Data.X509.Internal (asn1Container)
 
 type GeneralNames = [AltName]
 
@@ -31,11 +47,6 @@ data AttributeCertificateInfo = AttributeCertificateInfo
   deriving (Show, Eq)
 
 -- | Holder as defined in RFC 5755 section 4.1
--- | https://datatracker.ietf.org/doc/html/rfc5755#section-4.2.2
--- | this specification RECOMMENDS that only one of the options be used in any given AC.
--- | For any environment where the AC is passed in an authenticated
--- | message or session and where the authentication is based on the use
--- | of an X.509 PKC, the Holder field SHOULD use the baseCertificateID
 data Holder
   = HolderBaseCertificateID IssuerSerial
   | HolderEntityName GeneralNames
@@ -43,19 +54,12 @@ data Holder
   deriving (Show, Eq)
 
 -- | AttCertIssuer as defined in RFC 5755 section 4.1
--- | https://datatracker.ietf.org/doc/html/rfc5755#section-4.2.3
 data AttCertIssuer
   = AttCertIssuerV1 GeneralNames -- v1Form, MUST NOT be used in this profile
   | AttCertIssuerV2 V2Form
   deriving (Show, Eq)
 
 -- | V2Form for AttCertIssuer
--- | ACs conforming to this profile MUST use the v2Form choice, which MUST
--- | contain one and only one GeneralName in the issuerName, which MUST
--- | contain a non-empty distinguished name in the directoryName field.
--- | This means that all AC issuers MUST have non-empty distinguished
--- | names.  ACs conforming to this profile MUST omit the
--- | baseCertificateID and objectDigestInfo fields.
 data V2Form = V2Form
   { v2fromIssuerName :: GeneralNames,
     v2fromBaseCertificateID :: Maybe IssuerSerial,
@@ -64,8 +68,6 @@ data V2Form = V2Form
   deriving (Show, Eq)
 
 -- | IssuerSerial from RFC 5755
--- | https://datatracker.ietf.org/doc/html/rfc5755#section-4.2.5
--- | he issuer/serialNumber pair MUST form a unique combination
 data IssuerSerial = IssuerSerial
   { issuer :: GeneralNames,
     serial :: Integer, -- CertificateSerialNumber
@@ -97,14 +99,11 @@ data AttCertValidityPeriod = AttCertValidityPeriod
   deriving (Show, Eq)
 
 -- | UniqueID from X.509
--- | https://datatracker.ietf.org/doc/html/rfc5755#section-4.2.8
 type UniqueID = BitArray
 
--- | A signature is just a bit string, as defined in X.509.
--- type Signature = BitArray
 instance ASN1Object AttCertValidityPeriod where
-  toASN1 (AttCertValidityPeriod notBefore notAfter) =
-    ([Start Sequence, ASN1Time TimeUTC notBefore Nothing, ASN1Time TimeUTC notAfter Nothing, End Sequence] ++)
+  toASN1 (AttCertValidityPeriod notBefore notAfter) xs =
+    [Start Sequence, ASN1Time TimeUTC notBefore Nothing, ASN1Time TimeUTC notAfter Nothing, End Sequence] ++ xs
   fromASN1 (Start Sequence : ASN1Time TimeUTC nb Nothing : ASN1Time TimeUTC na Nothing : End Sequence : rest) =
     Right (AttCertValidityPeriod nb na, rest)
   fromASN1 _ = Left "AttCertValidityPeriod: unexpected format"
@@ -153,24 +152,35 @@ parseObjectDigestInfo = onNextContainer Sequence $ do
 parseV2Form :: ParseASN1 V2Form
 parseV2Form = onNextContainer Sequence $ do
   issuerName <- parseGeneralNames
+  case issuerName of
+    [AltDirectoryName (DistinguishedName dn)] ->
+      when (null dn) $
+        throwParseError "V2Form: issuerName's directoryName MUST NOT be empty"
+    [_] -> throwParseError "V2Form: issuerName MUST contain a directoryName"
+    _ -> throwParseError "V2Form: issuerName MUST contain one and only one GeneralName"
+
   baseCertID <- onNextContainerMaybe (Container Context 0) parseIssuerSerial
+  when (isJust baseCertID) $
+    throwParseError "V2Form: baseCertificateID MUST be omitted"
+
   objDigestInfo <- onNextContainerMaybe (Container Context 1) parseObjectDigestInfo
+  when (isJust objDigestInfo) $
+    throwParseError "V2Form: objectDigestInfo MUST be omitted"
+
   return $ V2Form issuerName baseCertID objDigestInfo
 
 parseHolder :: ParseASN1 Holder
 parseHolder = do
   mBaseCertID <- onNextContainerMaybe (Container Context 0) parseIssuerSerial
-  case mBaseCertID of
-    Just is -> return $ HolderBaseCertificateID is
-    Nothing -> do
-      mEntityName <- onNextContainerMaybe (Container Context 1) parseGeneralNames
-      case mEntityName of
-        Just gn -> return $ HolderEntityName gn
-        Nothing -> do
-          mObjectDigestInfo <- onNextContainerMaybe (Container Context 2) parseObjectDigestInfo
-          case mObjectDigestInfo of
-            Just odi -> return $ HolderObjectDigestInfo odi
-            Nothing -> throwParseError "Holder: unknown choice"
+  mEntityName <- onNextContainerMaybe (Container Context 1) parseGeneralNames
+  mObjectDigestInfo <- onNextContainerMaybe (Container Context 2) parseObjectDigestInfo
+
+  case (mBaseCertID, mEntityName, mObjectDigestInfo) of
+    (Just is, Nothing, Nothing) -> return $ HolderBaseCertificateID is
+    (Nothing, Just gn, Nothing) -> return $ HolderEntityName gn
+    (Nothing, Nothing, Just odi) -> return $ HolderObjectDigestInfo odi
+    (Nothing, Nothing, Nothing) -> throwParseError "Holder: one of baseCertificateID, entityName, or objectDigestInfo must be present"
+    _ -> throwParseError "Holder: only one of baseCertificateID, entityName, or objectDigestInfo must be used"
 
 parseAttCertIssuer :: ParseASN1 AttCertIssuer
 parseAttCertIssuer = do
@@ -190,12 +200,14 @@ parseAttributeCertificateInfo = onNextContainer Sequence $ do
       IntVal 1 -> return 1
       IntVal v -> throwParseError ("AttributeCertificateInfo: unexpected version " ++ show v)
       _ -> throwParseError "AttributeCertificateInfo: expecting version"
-  holder <- parseHolder
-  acIssuer <- parseAttCertIssuer
+  holder <- getObject
+  acIssuer <- getObject
   sig <- getObject
   sn <-
     getNext >>= \case
-      IntVal i -> return i
+      IntVal i -> do
+        when (i <= 0) $ throwParseError "AttributeCertificateInfo: serialNumber MUST be positive"
+        return i
       _ -> throwParseError "AttributeCertificateInfo: expecting serial number"
   validity <- getObject
   attrs <- getObject
@@ -204,65 +216,61 @@ parseAttributeCertificateInfo = onNextContainer Sequence $ do
     _ -> Nothing
   AttributeCertificateInfo ver holder acIssuer sig sn validity attrs uid <$> getObject
 
-encodeAttributeCertificateInfo :: AttributeCertificateInfo -> [ASN1]
-encodeAttributeCertificateInfo attCert = undefined
-
 instance ASN1Object IssuerSerial where
-  toASN1 :: IssuerSerial -> ASN1S
-  toASN1 (IssuerSerial issuer' serial' issuerUID') =
-    ([Start Sequence] ++)
-      . (encodeGeneralNames issuer' ++)
-      . ([IntVal serial'] ++)
-      . maybe id (\uid -> ([BitString uid] ++)) issuerUID'
-      . ([End Sequence] ++)
+  toASN1 (IssuerSerial issuer' serial' issuerUID') xs =
+    [Start Sequence]
+      ++ encodeGeneralNames issuer'
+      ++ [IntVal serial']
+      ++ maybe [] (\uid -> [BitString uid]) issuerUID'
+      ++ [End Sequence]
+      ++ xs
   fromASN1 = runParseASN1State parseIssuerSerial
 
 instance ASN1Object ObjectDigestInfo where
-  toASN1 :: ObjectDigestInfo -> ASN1S
-  toASN1 (ObjectDigestInfo objType otherObjType alg objDigest) =
-    ([Start Sequence] ++)
-      . ([IntVal $ fromIntegral $ fromEnum objType] ++)
-      . maybe id (\oid -> ([OID oid] ++)) otherObjType
-      . toASN1 alg
-      . ([BitString $ toBitArray objDigest 0] ++)
-      . ([End Sequence] ++)
+  toASN1 (ObjectDigestInfo objType otherObjType alg objDigest) xs =
+    [Start Sequence]
+      ++ [IntVal $ fromIntegral $ fromEnum objType]
+      ++ maybe [] (\oid -> [OID oid]) otherObjType
+      ++ toASN1 alg []
+      ++ [BitString $ toBitArray objDigest 0]
+      ++ [End Sequence]
+      ++ xs
   fromASN1 = runParseASN1State parseObjectDigestInfo
 
 instance ASN1Object V2Form where
-  toASN1 :: V2Form -> ASN1S
-  toASN1 (V2Form issuerName baseCertID objDigestInfo) =
-    ([Start Sequence] ++)
-      . (encodeGeneralNames issuerName ++)
-      . maybe id toASN1 baseCertID
-      . maybe id toASN1 objDigestInfo
-      . ([End Sequence] ++)
+  toASN1 (V2Form issuerName baseCertID objDigestInfo) xs =
+    [Start Sequence]
+      ++ encodeGeneralNames issuerName
+      ++ maybe [] (\x -> asn1Container (Container Context 0) (toASN1 x [])) baseCertID
+      ++ maybe [] (\x -> asn1Container (Container Context 1) (toASN1 x [])) objDigestInfo
+      ++ [End Sequence]
+      ++ xs
   fromASN1 = runParseASN1State parseV2Form
 
 instance ASN1Object Holder where
-  toASN1 :: Holder -> ASN1S
-  toASN1 (HolderBaseCertificateID issuerSerial) = toASN1 issuerSerial
-  toASN1 (HolderEntityName generalNames) = (encodeGeneralNames generalNames ++)
-  toASN1 (HolderObjectDigestInfo objDigestInfo) = toASN1 objDigestInfo
+  toASN1 (HolderBaseCertificateID issuerSerial) xs = asn1Container (Container Context 0) (toASN1 issuerSerial []) ++ xs
+  toASN1 (HolderEntityName generalNames) xs = asn1Container (Container Context 1) (encodeGeneralNames generalNames) ++ xs
+  toASN1 (HolderObjectDigestInfo objDigestInfo) xs = asn1Container (Container Context 2) (toASN1 objDigestInfo []) ++ xs
   fromASN1 = runParseASN1State parseHolder
 
 instance ASN1Object AttCertIssuer where
-  toASN1 :: AttCertIssuer -> ASN1S
-  toASN1 (AttCertIssuerV1 generalNames) = (encodeGeneralNames generalNames ++)
-  toASN1 (AttCertIssuerV2 v2Form) = toASN1 v2Form
+  toASN1 (AttCertIssuerV1 generalNames) xs = encodeGeneralNames generalNames ++ xs
+  toASN1 (AttCertIssuerV2 v2Form) xs = asn1Container (Container Context 0) (toASN1 v2Form []) ++ xs
   fromASN1 = runParseASN1State parseAttCertIssuer
 
 instance ASN1Object AttributeCertificateInfo where
-  toASN1 :: AttributeCertificateInfo -> ASN1S
-  toASN1 (AttributeCertificateInfo ver' holder' issuer' sig' sn' valid' attrs' uid' exts') =
-    ([Start Sequence] ++)
-      . ([IntVal $ fromIntegral ver'] ++)
-      . toASN1 holder'
-      . toASN1 issuer'
-      . toASN1 sig'
-      . ([IntVal sn'] ++)
-      . toASN1 valid'
-      . toASN1 attrs'
-      . maybe id (\u -> ([BitString u] ++)) uid'
-      . toASN1 exts'
-      . ([End Sequence] ++)
+  toASN1 (AttributeCertificateInfo acVer acHolder acIssuer acSig acSn acValid acAttrs acUid acExts) xs =
+    ( [Start Sequence]
+        ++ [IntVal $ fromIntegral acVer]
+        ++ toASN1 acHolder []
+        ++ toASN1 acIssuer []
+        ++ toASN1 acSig []
+        ++ [IntVal acSn]
+        ++ toASN1 acValid []
+        ++ toASN1 acAttrs []
+        ++ maybe [] (\u -> [BitString u]) acUid
+        ++ toASN1 acExts []
+        ++ [End Sequence]
+    )
+      ++ xs
   fromASN1 = runParseASN1State parseAttributeCertificateInfo

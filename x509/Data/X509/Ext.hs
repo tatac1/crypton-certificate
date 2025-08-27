@@ -50,6 +50,7 @@ import Data.List (find)
 import Data.Proxy
 import Data.X509.DistinguishedName
 import Data.X509.ExtensionRaw
+import Data.X509.Internal
 
 -- | key usage flag that is found in the key usage extension field.
 data ExtKeyUsageFlag
@@ -234,6 +235,7 @@ data AltName
   | AltNameIP B.ByteString
   | AltNameXMPP String
   | AltNameDNSSRV String
+  | AltDirectoryName DistinguishedName
   deriving (Show, Eq, Ord)
 
 -- | Provide a way to supply alternate name that can be
@@ -332,6 +334,7 @@ parseGeneralNames = onNextContainer Sequence $ getMany getAddr
       case n of
         (Other Context 1 b) -> return $ AltNameRFC822 $ BC.unpack b
         (Other Context 2 b) -> return $ AltNameDNS $ BC.unpack b
+        (Start (Container Context 4)) -> AltDirectoryName <$> getObject
         (Other Context 6 b) -> return $ AltNameURI $ BC.unpack b
         (Other Context 7 b) -> return $ AltNameIP b
         _ ->
@@ -345,6 +348,7 @@ encodeGeneralNames names =
   where
     encodeAltName (AltNameRFC822 n) = [Other Context 1 $ BC.pack n]
     encodeAltName (AltNameDNS n) = [Other Context 2 $ BC.pack n]
+    encodeAltName (AltDirectoryName dn) = asn1Container (Container Context 4) (toASN1 dn [])
     encodeAltName (AltNameURI n) = [Other Context 6 $ BC.pack n]
     encodeAltName (AltNameIP n) = [Other Context 7 $ n]
     encodeAltName (AltNameXMPP n) =
