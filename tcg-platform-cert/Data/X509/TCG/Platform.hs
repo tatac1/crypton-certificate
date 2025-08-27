@@ -1,5 +1,4 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE InstanceSigs #-}
 
 -- |
 -- Module      : Data.X509.TCG.Platform
@@ -10,56 +9,53 @@
 --
 -- TCG Platform Certificate data structures and processing.
 --
--- This module implements Platform Certificates as defined in the IWG Platform 
--- Certificate Profile v1.1. Platform Certificates are attribute certificates 
+-- This module implements Platform Certificates as defined in the IWG Platform
+-- Certificate Profile v1.1. Platform Certificates are attribute certificates
 -- that bind platform configuration information to a platform identity.
 module Data.X509.TCG.Platform
   ( -- * Platform Certificate Types
     PlatformCertificateInfo (..),
     SignedPlatformCertificate,
-    
+
     -- * Platform Configuration
     PlatformConfiguration (..),
     PlatformConfigurationV2 (..),
     ComponentStatus (..),
-    
+
     -- * Platform Information
     PlatformInfo (..),
     TPMInfo (..),
     TPMSpecification (..),
     TPMVersion (..),
-    
+
     -- * Marshalling Operations
     encodeSignedPlatformCertificate,
     decodeSignedPlatformCertificate,
-    
+
     -- * Accessor Functions
     getPlatformCertificate,
     getPlatformConfiguration,
     getPlatformInfo,
     getTPMInfo,
     getComponentStatus,
-  ) where
+  )
+where
 
-import qualified Data.ByteString as B
-import Data.Hourglass (DateTime)
-import Data.X509 (DistinguishedName, SignatureALG, Extensions)
-import Data.X509.Attribute (AttributeValue(..), Attributes)
-import Data.X509.AttCert (Holder, AttCertIssuer, AttCertValidityPeriod, UniqueID)
-import Data.X509 (SignedExact, getSigned, signedObject, encodeSignedObject, decodeSignedObject)
-import Data.X509.TCG.Component (ComponentIdentifier, ComponentIdentifierV2)
 import Data.ASN1.Types
-import Data.ASN1.Parse
-import Data.ASN1.Encoding
+import qualified Data.ByteString as B
+import Data.X509 (Extensions, SignatureALG, SignedExact, decodeSignedObject, encodeSignedObject, getSigned, signedObject)
+import Data.X509.AttCert (AttCertIssuer, AttCertValidityPeriod, Holder, UniqueID)
+import Data.X509.Attribute (AttributeValue, Attributes)
+import Data.X509.TCG.Component (ComponentIdentifier, ComponentIdentifierV2)
 
 -- | Platform Certificate Information structure
--- 
+--
 -- This is similar to AttributeCertificateInfo but specifically for Platform Certificates
 -- as defined in the IWG specification.
 data PlatformCertificateInfo = PlatformCertificateInfo
   { pciVersion :: Int, -- Must be 2 (v2)
     pciHolder :: Holder,
-    pciIssuer :: AttCertIssuer, 
+    pciIssuer :: AttCertIssuer,
     pciSignature :: SignatureALG,
     pciSerialNumber :: Integer,
     pciValidity :: AttCertValidityPeriod,
@@ -71,11 +67,11 @@ data PlatformCertificateInfo = PlatformCertificateInfo
 
 -- | ASN1Object instance for PlatformCertificateInfo
 instance ASN1Object PlatformCertificateInfo where
-  toASN1 (PlatformCertificateInfo pciVer pciHolder pciIssuer pciSig pciSn pciValid pciAttrs pciUid pciExts) xs =
+  toASN1 (PlatformCertificateInfo pciVer pciHolder' pciIssuer' pciSig pciSn pciValid pciAttrs pciUid pciExts) xs =
     ( [Start Sequence]
         ++ [IntVal $ fromIntegral pciVer]
-        ++ toASN1 pciHolder []
-        ++ toASN1 pciIssuer []
+        ++ toASN1 pciHolder' []
+        ++ toASN1 pciIssuer' []
         ++ toASN1 pciSig []
         ++ [IntVal pciSn]
         ++ toASN1 pciValid []
@@ -83,8 +79,9 @@ instance ASN1Object PlatformCertificateInfo where
         ++ maybe [] (\u -> [BitString u]) pciUid
         ++ toASN1 pciExts []
         ++ [End Sequence]
-    ) ++ xs
-  fromASN1 xs = Left "Platform certificate parsing not implemented"
+    )
+      ++ xs
+  fromASN1 _ = Left "Platform certificate parsing not implemented"
 
 -- | A Signed Platform Certificate
 type SignedPlatformCertificate = SignedExact PlatformCertificateInfo
@@ -104,7 +101,7 @@ data PlatformConfiguration = PlatformConfiguration
 -- | Platform Configuration structure (v2)
 --
 -- Enhanced version with component status tracking for Delta Platform Certificates.
-data PlatformConfigurationV2 = PlatformConfigurationV2  
+data PlatformConfigurationV2 = PlatformConfigurationV2
   { pcv2Manufacturer :: B.ByteString,
     pcv2Model :: B.ByteString,
     pcv2Version :: B.ByteString,
@@ -117,10 +114,14 @@ data PlatformConfigurationV2 = PlatformConfigurationV2
 --
 -- Tracks the status of components in Platform Configuration v2.
 data ComponentStatus
-  = ComponentAdded      -- ^ Component was added to the platform
-  | ComponentRemoved    -- ^ Component was removed from the platform  
-  | ComponentModified   -- ^ Component was modified on the platform
-  | ComponentUnchanged  -- ^ Component remains unchanged
+  = -- | Component was added to the platform
+    ComponentAdded
+  | -- | Component was removed from the platform
+    ComponentRemoved
+  | -- | Component was modified on the platform
+    ComponentModified
+  | -- | Component remains unchanged
+    ComponentUnchanged
   deriving (Show, Eq, Enum)
 
 -- | Platform Information structure
@@ -153,7 +154,7 @@ data TPMVersion = TPMVersion
   }
   deriving (Show, Eq)
 
--- | TPM Specification information  
+-- | TPM Specification information
 data TPMSpecification = TPMSpecification
   { tpmSpecFamily :: B.ByteString,
     tpmSpecLevel :: Int,
@@ -179,7 +180,7 @@ getPlatformCertificate = signedObject . getSigned
 -- (OID 2.23.133.2.1) and parses it into a structured PlatformConfiguration.
 --
 -- The platform configuration provides detailed information about:
--- * Platform manufacturer, model, version, and serial number  
+-- * Platform manufacturer, model, version, and serial number
 -- * Complete list of platform components with their identifiers
 -- * Component hierarchy and relationships
 --
@@ -192,7 +193,7 @@ getPlatformCertificate = signedObject . getSigned
 --   Nothing -> putStrLn "No platform configuration found in certificate"
 -- @
 getPlatformConfiguration :: SignedPlatformCertificate -> Maybe PlatformConfiguration
-getPlatformConfiguration cert = 
+getPlatformConfiguration cert =
   case lookupAttribute "2.23.133.2.1" (pciAttributes $ getPlatformCertificate cert) of
     Just attrVal -> parsePlatformConfiguration attrVal
     Nothing -> Nothing
@@ -203,10 +204,10 @@ getPlatformConfiguration cert =
 getPlatformInfo :: SignedPlatformCertificate -> Maybe PlatformInfo
 getPlatformInfo cert = do
   let attrs = pciAttributes $ getPlatformCertificate cert
-  manufacturer <- lookupAttributeValue "2.23.133.2.4" attrs  -- tcg-at-platformManufacturer
-  model <- lookupAttributeValue "2.23.133.2.5" attrs         -- tcg-at-platformModel  
-  serial <- lookupAttributeValue "2.23.133.2.6" attrs        -- tcg-at-platformSerial
-  version <- lookupAttributeValue "2.23.133.2.7" attrs       -- tcg-at-platformVersion
+  manufacturer <- lookupAttributeValue "2.23.133.2.4" attrs -- tcg-at-platformManufacturer
+  model <- lookupAttributeValue "2.23.133.2.5" attrs -- tcg-at-platformModel
+  serial <- lookupAttributeValue "2.23.133.2.6" attrs -- tcg-at-platformSerial
+  version <- lookupAttributeValue "2.23.133.2.7" attrs -- tcg-at-platformVersion
   return $ PlatformInfo manufacturer model serial version
 
 -- | Extract TPM Information from a Platform Certificate
@@ -215,11 +216,11 @@ getPlatformInfo cert = do
 getTPMInfo :: SignedPlatformCertificate -> Maybe TPMInfo
 getTPMInfo cert = do
   let attrs = pciAttributes $ getPlatformCertificate cert
-  model <- lookupAttributeValue "2.23.133.2.16" attrs      -- tcg-at-tpmModel
+  model <- lookupAttributeValue "2.23.133.2.16" attrs -- tcg-at-tpmModel
   versionData <- lookupAttributeValue "2.23.133.2.17" attrs -- tcg-at-tpmVersion
-  specData <- lookupAttributeValue "2.23.133.2.18" attrs    -- tcg-at-tpmSpecification
+  specData <- lookupAttributeValue "2.23.133.2.18" attrs -- tcg-at-tpmSpecification
   version <- parseTPMVersion versionData
-  spec <- parseTPMSpecification specData  
+  spec <- parseTPMSpecification specData
   return $ TPMInfo model version spec
 
 -- | Extract Component Status information for Delta Platform Certificates
@@ -273,7 +274,7 @@ parsePlatformConfiguration :: AttributeValue -> Maybe PlatformConfiguration
 parsePlatformConfiguration _ = Nothing -- TODO: Implement ASN.1 parsing
 
 -- | Extract Platform Configuration v2 from a Platform Certificate
-getPlatformConfigurationV2 :: SignedPlatformCertificate -> Maybe PlatformConfigurationV2  
+getPlatformConfigurationV2 :: SignedPlatformCertificate -> Maybe PlatformConfigurationV2
 getPlatformConfigurationV2 cert =
   case lookupAttribute "2.23.133.2.23" (pciAttributes $ getPlatformCertificate cert) of
     Just attrVal -> parsePlatformConfigurationV2 attrVal
@@ -287,7 +288,7 @@ parsePlatformConfigurationV2 _ = Nothing -- TODO: Implement ASN.1 parsing
 parseTPMVersion :: B.ByteString -> Maybe TPMVersion
 parseTPMVersion _ = Nothing -- TODO: Implement TPM version parsing
 
--- | Parse TPM Specification from ByteString  
+-- | Parse TPM Specification from ByteString
 parseTPMSpecification :: B.ByteString -> Maybe TPMSpecification
 parseTPMSpecification _ = Nothing -- TODO: Implement TPM specification parsing
 
