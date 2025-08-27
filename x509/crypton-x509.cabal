@@ -30,9 +30,10 @@ Library
                      Data.X509AC
                      Data.X509.EC
                      Data.X509.AlgorithmIdentifier
-  Other-modules:     Data.X509.AttCert
+                     Data.X509.AttCert
                      Data.X509.Attribute
-                     Data.X509.Internal
+                     Data.X509.AttributeRaw
+  Other-modules:     Data.X509.Internal
                      Data.X509.CertificateChain
                      Data.X509.DistinguishedName
                      Data.X509.Cert
@@ -50,6 +51,8 @@ Test-Suite test-x509
   type:              exitcode-stdio-1.0
   hs-source-dirs:    Tests
   Main-is:           Tests.hs
+  Other-modules:     TestAC
+                     Arbitrary
   Build-Depends:     base >= 3 && < 5
                    , bytestring
                    , mtl
@@ -57,6 +60,7 @@ Test-Suite test-x509
                    , tasty-quickcheck
                    , hourglass
                    , asn1-types
+                   , asn1-encoding
                    , crypton-x509
                    , crypton
   ghc-options:       -Wall -fno-warn-orphans -fno-warn-missing-signatures

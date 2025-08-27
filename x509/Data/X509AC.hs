@@ -1,5 +1,5 @@
 -- |
--- Module      : Data.X509.AC
+-- Module      : Data.X509AC
 -- License     : BSD-style
 -- Maintainer  : Toru Tomita <toru.tomita@gmail.com>
 -- Stability   : experimental
@@ -7,27 +7,45 @@
 --
 -- Read/Write X.509 Attribute Certificate and their signed equivalents.
 --
--- Follows RFC5755
+-- This module provides functionality for handling Attribute Certificates as defined 
+-- in RFC 5755. Attribute Certificates are similar to X.509 Public Key Certificates
+-- but are used to bind attributes (rather than public keys) to holders.
+--
+-- For general-purpose X.509 types and signing functions (e.g., 'DistinguishedName',
+-- 'objectToSignedExactF', 'PrivKey'), please import the main 'Data.X509' module.
 module Data.X509AC
-  ( -- * Attribute Certificate types
+  ( -- * Core Types
     SignedAttributeCertificate,
     AttributeCertificateInfo (..),
-    AttCertValidityPeriod (..),
-    Holder (..),
-    AttCertIssuer (..),
-    module Data.X509.Attribute,
-    module Data.X509.AttCert,
 
-    -- * Accessors
+    -- * Validity and Identification
+    AttCertValidityPeriod (..),
+    UniqueID,
+
+    -- * Holder Information
+    Holder (..),
+    IssuerSerial (..),
+    ObjectDigestInfo (..),
+    DigestedObjectType (..),
+
+    -- * Issuer Information
+    AttCertIssuer (..),
+    V2Form (..),
+
+    -- * Attributes
+    module Data.X509.Attribute,
+
+    -- * Marshalling Operations
+    encodeSignedAttributeCertificate,
+    decodeSignedAttributeCertificate,
+
+    -- * Accessor Functions
     getAttributesCertificate,
     getHolder,
     getIssuer,
     getAttributes,
     getValidity,
     getSerialNumber,
-
-    -- * Decoding
-    decodeSignedAttributeCertificate,
   )
 where
 
@@ -36,34 +54,67 @@ import Data.X509.AttCert
 import Data.X509.Attribute
 import Data.X509.Signed
 
--- | A Signed Attibute Certificate is a `SignedExact` of an `AttributeCertificateInfo`.
+-- | A Signed Attribute Certificate is a 'SignedExact' of an 'AttributeCertificateInfo'.
+--
+-- This type represents a complete, signed attribute certificate that can be
+-- encoded/decoded and has its signature verified. It maintains both the
+-- parsed structure and the original raw bytes for signature verification.
 type SignedAttributeCertificate = SignedExact AttributeCertificateInfo
 
--- * Accessors
+-- * Marshalling Operations
 
+-- | Encode a SignedAttributeCertificate to a DER-encoded bytestring.
+--
+-- This function serializes the complete signed attribute certificate,
+-- including the signature, into DER format suitable for storage or transmission.
+encodeSignedAttributeCertificate :: SignedAttributeCertificate -> B.ByteString
+encodeSignedAttributeCertificate = encodeSignedObject
+
+-- | Decode a DER-encoded bytestring to a SignedAttributeCertificate.
+--
+-- This function parses a DER-encoded attribute certificate and maintains
+-- the original raw bytes for signature verification purposes.
+--
+-- Returns 'Left' with an error message if parsing fails,
+-- or 'Right' with the parsed certificate if successful.
+decodeSignedAttributeCertificate :: B.ByteString -> Either String SignedAttributeCertificate
+decodeSignedAttributeCertificate = decodeSignedObject
+
+-- * Accessor Functions
+
+-- | Extract the AttributeCertificateInfo from a SignedAttributeCertificate.
+--
+-- This returns the core certificate information without the signature data.
 getAttributesCertificate :: SignedAttributeCertificate -> AttributeCertificateInfo
 getAttributesCertificate = signedObject . getSigned
 
--- | Return the holder of the attribute certificate.
+-- | Extract the holder information from an attribute certificate.
+--
+-- The holder identifies the entity to which the attributes are bound.
 getHolder :: SignedAttributeCertificate -> Holder
-getHolder = aciHolder . signedObject . getSigned
+getHolder = aciHolder . getAttributesCertificate
 
--- | Return the issuer of the attribute certificate.
+-- | Extract the issuer information from an attribute certificate.
+--
+-- The issuer identifies the Attribute Authority (AA) that issued the certificate.
 getIssuer :: SignedAttributeCertificate -> AttCertIssuer
-getIssuer = aciIssuer . signedObject . getSigned
+getIssuer = aciIssuer . getAttributesCertificate
 
--- | Return the attributes of the attribute certificate.
+-- | Extract the attributes from an attribute certificate.
+--
+-- These are the actual attributes (roles, clearances, etc.) bound to the holder.
 getAttributes :: SignedAttributeCertificate -> Attributes
-getAttributes = aciAttributes . signedObject . getSigned
+getAttributes = aciAttributes . getAttributesCertificate
 
--- | Return the validity period of the attribute certificate.
+-- | Extract the validity period from an attribute certificate.
+--
+-- Returns the time period during which the certificate is valid.
 getValidity :: SignedAttributeCertificate -> AttCertValidityPeriod
-getValidity = aciValidity . signedObject . getSigned
+getValidity = aciValidity . getAttributesCertificate
 
--- | Return the serial number of the attribute certificate.
+-- | Extract the serial number from an attribute certificate.
+--
+-- The serial number uniquely identifies the certificate within the
+-- context of the issuing Attribute Authority.
 getSerialNumber :: SignedAttributeCertificate -> Integer
-getSerialNumber = aciSerialNumber . signedObject . getSigned
-
--- | Try to decode a bytestring to a SignedCertificate
-decodeSignedAttributeCertificate :: B.ByteString -> Either String SignedAttributeCertificate
-decodeSignedAttributeCertificate = decodeSignedObject
+getSerialNumber = aciSerialNumber . getAttributesCertificate
