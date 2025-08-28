@@ -417,6 +417,7 @@ parseGeneralName :: ParseASN1 AltName
 parseGeneralName = do
   n <- getNext
   case n of
+    (Start (Container Context 0)) -> parseOtherName -- otherName
     (Other Context 1 b) -> return $ AltNameRFC822 $ BC.unpack b
     (Other Context 2 b) -> return $ AltNameDNS $ BC.unpack b
     (Start (Container Context 4)) -> do
@@ -426,15 +427,51 @@ parseGeneralName = do
     (Other Context 6 b) -> return $ AltNameURI $ BC.unpack b
     (Other Context 7 b) -> return $ AltNameIP b
     _ -> throwParseError ("GeneralNames: not coping with unknown stream " ++ show n)
+  where
+    parseOtherName = do
+      oid <- getNext
+      case oid of
+        OID [1, 3, 6, 1, 5, 5, 7, 8, 5] -> do -- XMPP addr (id-on-xmppAddr)
+          Start (Container Context 0) <- getNext
+          ASN1String cs <- getNext
+          End (Container Context 0) <- getNext
+          End (Container Context 0) <- getNext
+          case asn1CharacterToString cs of
+            Nothing -> throwParseError "GeneralNames: invalid string for XMPP Addr"
+            Just s -> return $ AltNameXMPP s
+        OID [1, 3, 6, 1, 5, 5, 7, 8, 7] -> do -- DNS SRV addr (id-on-dnsSRV)
+          Start (Container Context 0) <- getNext
+          ASN1String cs <- getNext
+          End (Container Context 0) <- getNext
+          End (Container Context 0) <- getNext
+          case asn1CharacterToString cs of
+            Nothing -> throwParseError "GeneralNames: invalid string for DNS SRV Addr"
+            Just s -> return $ AltNameDNSSRV s
+        OID unknown -> throwParseError ("GeneralNames: unknown OID in otherName " ++ show unknown)
+        _ -> throwParseError ("GeneralNames: expecting OID in otherName but got " ++ show oid)
 
--- | TODO impl: AltNameXMPP, AltNameDNSSRV
 encodeGeneralName :: AltName -> [ASN1]
 encodeGeneralName (AltNameRFC822 n) = [Other Context 1 $ BC.pack n]
 encodeGeneralName (AltNameDNS n) = [Other Context 2 $ BC.pack n]
 encodeGeneralName (AltDirectoryName dn) = asn1Container (Container Context 4) (toASN1 dn [])
 encodeGeneralName (AltNameURI n) = [Other Context 6 $ BC.pack n]
 encodeGeneralName (AltNameIP n) = [Other Context 7 n]
-encodeGeneralName n = error $ "encodeGeneralName: not implemented: " ++ show n
+encodeGeneralName (AltNameXMPP n) =
+  [ Start (Container Context 0),
+    OID [1, 3, 6, 1, 5, 5, 7, 8, 5], -- id-on-xmppAddr
+    Start (Container Context 0),
+    ASN1String $ asn1CharacterString UTF8 n,
+    End (Container Context 0),
+    End (Container Context 0)
+  ]
+encodeGeneralName (AltNameDNSSRV n) =
+  [ Start (Container Context 0),
+    OID [1, 3, 6, 1, 5, 5, 7, 8, 7], -- id-on-dnsSRV
+    Start (Container Context 0),
+    ASN1String $ asn1CharacterString UTF8 n,
+    End (Container Context 0),
+    End (Container Context 0)
+  ]
 
 bitsToFlags :: (Enum a) => BitArray -> [a]
 bitsToFlags bits = concat $ flip map [0 .. (bitArrayLength bits - 1)] $ \i -> do

@@ -38,9 +38,8 @@ instance Arbitrary AltName where
         pure $ AltNameDNS printable,
         pure $ AltNameURI printable,
         AltNameIP <$> arbitraryBS 4 4,
-        -- TODO
-        -- pure $ AltNameXMPP printable,
-        -- pure $ AltNameDNSSRV printable,
+        pure $ AltNameXMPP printable,
+        pure $ AltNameDNSSRV printable,
         AltDirectoryName <$> arbitrary
       ]
 
