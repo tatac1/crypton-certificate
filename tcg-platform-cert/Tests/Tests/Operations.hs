@@ -10,12 +10,42 @@ import Data.X509.TCG.Delta
 import Data.X509.TCG.Utils (lookupAttributeByOID)
 import Data.X509.TCG.OID (tcg_at_platformManufacturer, tcg_at_platformModel)
 import Data.X509.AttCert (Holder(..), AttCertIssuer(..), AttCertValidityPeriod(..))
-import Data.X509 (DistinguishedName(..))
+import Data.X509 (DistinguishedName(..), Certificate(..))
 import Data.X509.Attribute (Attributes(..))
 import Data.ASN1.Types (ASN1(..))
 import qualified Data.X509.TCG as TCG
 -- Cryptographic imports for testing
 import Data.Hourglass (DateTime(..), Date(..), TimeOfDay(..), Month(..))
+import Data.X509 (Certificate(..), certPubKey, certIssuerDN, certSerial, SignatureALG(..), HashALG(..), PubKeyALG(..), Extensions(..), PubKey(..))
+import Data.ASN1.OID (OID)
+import Data.ASN1.Types.String (asn1CharacterString, ASN1StringEncoding(..))
+-- Removed unused imports for test simplification
+
+-- Helper function to create a test EK certificate using TCG's key generation
+createTestEKCert :: IO Certificate
+createTestEKCert = do
+  -- Generate RSA keys for the test EK certificate
+  let alg = TCG.AlgRSA 2048 TCG.hashSHA256
+  (_, pubKey, privKey) <- TCG.generateKeys alg
+  
+  -- Create a minimal test Certificate structure  
+  let cnOid = [2, 5, 4, 3] -- Common Name OID
+      issuerDN = DistinguishedName 
+        [(cnOid, asn1CharacterString UTF8 "Test EK CA")]
+      subjectDN = DistinguishedName 
+        [(cnOid, asn1CharacterString UTF8 "Test EK Certificate")]
+  
+  return $ Certificate {
+    certVersion = 3,
+    certSerial = 12345,
+    certSignatureAlg = SignatureALG HashSHA256 PubKeyALG_RSA,
+    certIssuerDN = issuerDN,
+    certValidity = (DateTime (Date 2024 January 1) (TimeOfDay 0 0 0 0),
+                   DateTime (Date 2025 January 1) (TimeOfDay 0 0 0 0)),
+    certSubjectDN = subjectDN,
+    certPubKey = PubKeyRSA pubKey,
+    certExtensions = Extensions Nothing
+  }
 
 tests :: TestTree
 tests = testGroup "Operations Tests"
@@ -26,6 +56,9 @@ tests = testGroup "Operations Tests"
         True @?= True  -- Function exists and imports correctly
     
     , testCase "getCurrentPlatformConfiguration extracts config from Platform Certificate" $ do
+        -- Create test EK certificate
+        ekCert <- createTestEKCert
+        
         let config = PlatformConfiguration 
                      (B.pack "Test Corp") 
                      (B.pack "Model X") 
@@ -38,7 +71,7 @@ tests = testGroup "Operations Tests"
                       (TPMVersion 2 0 1 0) 
                       (TPMSpecification (B.pack "2.0") 116 1)
         
-        result <- TCG.createPlatformCertificate config components tpmInfo
+        result <- TCG.createPlatformCertificate config components tpmInfo ekCert
         case result of
           Left err -> assertFailure $ "Failed to create platform certificate: " ++ err
           Right cert -> do
@@ -51,6 +84,9 @@ tests = testGroup "Operations Tests"
                 pcv2Serial configV2 @?= B.pack "SN12345"
     
     , testCase "getCurrentPlatformConfiguration extracts config from Delta Certificate" $ do
+        -- Create test EK certificate
+        ekCert <- createTestEKCert
+        
         -- First create a base certificate
         let config = PlatformConfiguration 
                      (B.pack "Base Corp") 
@@ -64,7 +100,7 @@ tests = testGroup "Operations Tests"
                       (TPMVersion 2 0 1 0) 
                       (TPMSpecification (B.pack "2.0") 116 1)
         
-        baseCertResult <- TCG.createPlatformCertificate config components tpmInfo
+        baseCertResult <- TCG.createPlatformCertificate config components tpmInfo ekCert
         case baseCertResult of
           Left err -> assertFailure $ "Failed to create base certificate: " ++ err
           Right baseCert -> do
@@ -88,6 +124,9 @@ tests = testGroup "Operations Tests"
                     pcv2Components configV2 @?= []
     
     , testCase "getCurrentPlatformConfiguration handles Delta Certificate with components" $ do
+        -- Create test EK certificate
+        ekCert <- createTestEKCert
+        
         -- Create a base certificate first  
         let config = PlatformConfiguration 
                      (B.pack "Test Manufacturer") 
@@ -101,7 +140,7 @@ tests = testGroup "Operations Tests"
                       (TPMVersion 2 0 1 0) 
                       (TPMSpecification (B.pack "2.0") 116 1)
         
-        baseCertResult <- TCG.createPlatformCertificate config components tpmInfo
+        baseCertResult <- TCG.createPlatformCertificate config components tpmInfo ekCert
         case baseCertResult of
           Left err -> assertFailure $ "Failed to create base certificate: " ++ err  
           Right baseCert -> do
@@ -194,6 +233,9 @@ tests = testGroup "Operations Tests"
     ]
   , testGroup "TCG Module High-Level Functions"
     [ testCase "createPlatformCertificate successfully creates certificate" $ do
+        -- Create test EK certificate
+        ekCert <- createTestEKCert
+        
         let config = PlatformConfiguration 
                      (B.pack "Test Manufacturer") 
                      (B.pack "Test Model") 
@@ -205,7 +247,7 @@ tests = testGroup "Operations Tests"
                       (B.pack "TPM 2.0") 
                       (TPMVersion 2 0 1 0) 
                       (TPMSpecification (B.pack "2.0") 116 1)
-        result <- TCG.createPlatformCertificate config components tpmInfo
+        result <- TCG.createPlatformCertificate config components tpmInfo ekCert
         case result of
           Left err -> assertFailure $ "Expected successful certificate creation but got error: " ++ err
           Right cert -> do
@@ -215,6 +257,9 @@ tests = testGroup "Operations Tests"
             pciSerialNumber certInfo @?= 1
     
     , testCase "createPlatformCertificate extracts platform info correctly" $ do
+        -- Create test EK certificate
+        ekCert <- createTestEKCert
+        
         let config = PlatformConfiguration 
                      (B.pack "ACME Corp") 
                      (B.pack "Platform X") 
@@ -226,7 +271,7 @@ tests = testGroup "Operations Tests"
                       (B.pack "TPM 2.0") 
                       (TPMVersion 2 0 1 0) 
                       (TPMSpecification (B.pack "2.0") 116 1)
-        result <- TCG.createPlatformCertificate config components tpmInfo
+        result <- TCG.createPlatformCertificate config components tpmInfo ekCert
         case result of
           Left err -> assertFailure $ "Expected successful certificate creation but got error: " ++ err
           Right cert -> do
@@ -260,8 +305,11 @@ tests = testGroup "Operations Tests"
         -- Generate RSA algorithm and keys using new API
         let alg = TCG.AlgRSA 2048 TCG.hashSHA256
         keys@(_, _pubKey, _privKey) <- TCG.generateKeys alg
+        
+        -- Create test EK certificate
+        ekCert <- createTestEKCert
             
-        result <- TCG.mkPlatformCertificate config components tpmInfo validity TCG.Self keys
+        result <- TCG.mkPlatformCertificate config components tpmInfo ekCert validity TCG.Self keys
         case result of
           Left err -> assertFailure $ "Expected successful certificate creation but got error: " ++ err
           Right pair -> do
@@ -300,7 +348,11 @@ tests = testGroup "Operations Tests"
         -- Create base certificate using RSA
         let alg = TCG.AlgRSA 2048 TCG.hashSHA256
         keys@(_, _pubKey, _privKey) <- TCG.generateKeys alg
-        baseCertResult <- TCG.mkPlatformCertificate config components tpmInfo validity TCG.Self keys
+        
+        -- Create test EK certificate
+        ekCert <- createTestEKCert
+        
+        baseCertResult <- TCG.mkPlatformCertificate config components tpmInfo ekCert validity TCG.Self keys
         
         case baseCertResult of
           Left err -> assertFailure $ "Failed to create base certificate: " ++ err
@@ -345,8 +397,11 @@ tests = testGroup "Operations Tests"
         let alg = TCG.AlgRSA 2048 TCG.hashSHA256
         keys@(_, _pubKey, _privKey) <- TCG.generateKeys alg
         
+        -- Create test EK certificate
+        ekCert <- createTestEKCert
+        
         -- Create self-signed certificate
-        result <- TCG.mkPlatformCertificate config components tpmInfo validity TCG.Self keys
+        result <- TCG.mkPlatformCertificate config components tpmInfo ekCert validity TCG.Self keys
         case result of
           Left err -> assertFailure $ "Expected successful certificate creation but got error: " ++ err
           Right pair -> do
