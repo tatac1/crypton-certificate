@@ -17,12 +17,10 @@ module Data.X509.TCG.Utils
     isDeltaCertificate,
     
     -- * Configuration Utilities
-    computeResultingConfiguration,
     applyDeltaToBase,
     
     -- * Component Utilities
-    ComponentTree(..),
-    buildComponentTree,
+    ComponentTreeUtils(..),
     
     -- * Attribute Utilities
     lookupAttributeByOID,
@@ -37,12 +35,11 @@ module Data.X509.TCG.Utils
     formatError,
   ) where
 
-import qualified Data.ByteString as B
 import Data.Maybe (mapMaybe, fromMaybe)
 import Data.List (foldl')
 import Data.X509.Attribute (Attributes(..), Attribute(..), AttributeValue)
 import Data.X509.TCG.Platform
-import Data.X509.TCG.Delta hiding (applyDeltaToBase, ComponentTree)
+import Data.X509.TCG.Delta hiding (applyDeltaToBase)
 import Data.X509.TCG.Component
 import Data.X509.TCG.Attributes (TCGAttribute, parseTCGAttribute)
 import Data.X509.TCG.OID
@@ -79,7 +76,7 @@ isDeltaCertificate :: SignedDeltaPlatformCertificate -> Bool
 isDeltaCertificate deltaCert =
   let deltaInfo = getDeltaPlatformCertificate deltaCert
       attrs = dpciAttributes deltaInfo
-  in hasAttribute tcg_at_platformConfigurationDelta attrs
+  in hasAttribute tcg_at_platformConfiguration_v2 attrs
   where
     hasAttribute :: OID -> Attributes -> Bool
     hasAttribute targetOID (Attributes attrList) = 
@@ -87,28 +84,6 @@ isDeltaCertificate deltaCert =
 
 -- * Configuration Utilities
 
--- | Compute the final configuration after applying a series of deltas
---
--- This function processes a sequence of platform configuration deltas
--- and computes the final resulting configuration state.
---
--- Example:
--- @
--- case computeResultingConfiguration baseConfig deltas of
---   Right finalConfig -> useFinalConfig finalConfig
---   Left err -> handleError err
--- @
-computeResultingConfiguration :: PlatformConfigurationV2           -- ^ Base configuration
-                             -> [PlatformConfigurationDelta]       -- ^ Sequence of deltas
-                             -> Either TCGError PlatformConfigurationV2
-computeResultingConfiguration baseConfig deltas = 
-  foldl' applyNextDelta (Right baseConfig) deltas
-  where
-    applyNextDelta :: Either TCGError PlatformConfigurationV2 
-                   -> PlatformConfigurationDelta 
-                   -> Either TCGError PlatformConfigurationV2
-    applyNextDelta (Left err) _ = Left err
-    applyNextDelta (Right config) delta = applyDeltaToBase config delta
 
 -- | Apply a single configuration delta to a base configuration
 --
@@ -123,8 +98,8 @@ applyDeltaToBase config delta = do
   
   -- Apply platform info changes if present
   case pcdPlatformInfoChanges delta of
-    Nothing -> configWithComponents
-    Just infoChanges -> applyPlatformInfoChanges configWithComponents infoChanges
+    Nothing -> Right configWithComponents
+    Just infoChanges -> applyPlatformInfoChanges (Right configWithComponents) infoChanges
   where
     applyComponentDelta :: Either TCGError PlatformConfigurationV2 
                         -> ComponentDelta 
@@ -158,25 +133,11 @@ applyPlatformInfoChanges (Right config) infoChanges = Right $ config
 --
 -- This data type represents the hierarchical relationship between
 -- components in a platform certificate.
-data ComponentTree = ComponentTree
+data ComponentTreeUtils = ComponentTreeUtils
   { ctComponents :: [ComponentIdentifierV2]     -- ^ All components in the tree
   , ctHierarchy :: [(ComponentIdentifierV2, [ComponentIdentifierV2])]  -- ^ Parent-child relationships
   } deriving (Show, Eq)
 
--- | Build a component tree from a list of components
---
--- This function analyzes component relationships and constructs
--- a hierarchical tree structure representing parent-child relationships.
-buildComponentTree :: [ComponentIdentifierV2] -> ComponentTree
-buildComponentTree components = ComponentTree
-  { ctComponents = components
-  , ctHierarchy = buildHierarchyRelations components
-  }
-  where
-    buildHierarchyRelations :: [ComponentIdentifierV2] -> [(ComponentIdentifierV2, [ComponentIdentifierV2])]
-    buildHierarchyRelations comps = 
-      -- TODO: Implement actual hierarchy building logic based on component classes and addresses
-      map (\comp -> (comp, [])) comps
 
 -- * Attribute Utilities
 
@@ -218,14 +179,14 @@ extractTCGAttributes (Attributes attrList) =
 -- v2 format with additional fields for better component tracking.
 upgradeComponentToV2 :: ComponentIdentifier -> ComponentIdentifierV2
 upgradeComponentToV2 comp = ComponentIdentifierV2
-  { civ2Manufacturer = ciManufacturer comp
-  , civ2Model = ciModel comp
-  , civ2Serial = ciSerial comp
-  , civ2Revision = ciRevision comp
-  , civ2ManufacturerID = ciManufacturerID comp
-  , civ2FieldReplaceable = ciFieldReplaceable comp
-  , civ2ComponentClass = ComponentOther  -- Default class for upgraded components
-  , civ2ComponentAddress = Nothing       -- No address information in v1
+  { ci2Manufacturer = ciManufacturer comp
+  , ci2Model = ciModel comp
+  , ci2Serial = ciSerial comp
+  , ci2Revision = ciRevision comp
+  , ci2ManufacturerSerial = ciManufacturerSerial comp
+  , ci2ManufacturerRevision = ciManufacturerRevision comp
+  , ci2ComponentClass = ComponentOther []  -- Default class for upgraded components
+  , ci2ComponentAddress = Nothing       -- No address information in v1
   }
 
 -- | Downgrade a v2 ComponentIdentifier to v1 format
@@ -234,12 +195,12 @@ upgradeComponentToV2 comp = ComponentIdentifierV2
 -- v1 format, losing v2-specific information in the process.
 downgradeComponentFromV2 :: ComponentIdentifierV2 -> ComponentIdentifier
 downgradeComponentFromV2 comp = ComponentIdentifier
-  { ciManufacturer = civ2Manufacturer comp
-  , ciModel = civ2Model comp
-  , ciSerial = civ2Serial comp
-  , ciRevision = civ2Revision comp
-  , ciManufacturerID = civ2ManufacturerID comp
-  , ciFieldReplaceable = civ2FieldReplaceable comp
+  { ciManufacturer = ci2Manufacturer comp
+  , ciModel = ci2Model comp
+  , ciSerial = ci2Serial comp
+  , ciRevision = ci2Revision comp
+  , ciManufacturerSerial = ci2ManufacturerSerial comp
+  , ciManufacturerRevision = ci2ManufacturerRevision comp
   }
 
 -- * Error Utilities
@@ -309,5 +270,5 @@ updateComponent config component =
   config { pcv2Components = map updateStatus (pcv2Components config) }
   where
     updateStatus (comp, status)
-      | comp == component = (comp, ComponentUpdated)
+      | comp == component = (comp, ComponentModified)
       | otherwise = (comp, status)

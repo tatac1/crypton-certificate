@@ -1,4 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+
+{-# HLINT ignore "Use =<<" #-}
 
 -- |
 -- Module      : Data.X509.TCG.Delta
@@ -20,6 +23,7 @@ module Data.X509.TCG.Delta
     -- * Delta Configuration
     DeltaPlatformConfiguration (..),
     PlatformConfigurationDelta (..),
+    PlatformInfoDelta (..),
     ComponentDelta (..),
     DeltaOperation (..),
 
@@ -47,16 +51,24 @@ module Data.X509.TCG.Delta
     validateDeltaCertificate,
     applyDeltaToBase,
     computeResultingConfiguration,
+
+    -- * Parsing Functions (TODO)
+    parseDeltaPlatformConfiguration,
+    validateDeltaAttributes,
   )
 where
 
+import Data.ASN1.BinaryEncoding (DER (..))
+import Data.ASN1.Encoding (decodeASN1')
 import Data.ASN1.Types
 import qualified Data.ByteString as B
 import Data.Hourglass (DateTime)
-import Data.X509 (DistinguishedName, Extensions, SignatureALG, SignedExact, decodeSignedObject, encodeSignedObject, getSigned, signedObject)
+import Data.List (find)
+import Data.X509 (DistinguishedName, Extensions (..), SignatureALG, SignedExact, decodeSignedObject, encodeSignedObject, getSigned, signedObject)
 import Data.X509.AttCert (AttCertIssuer, AttCertValidityPeriod, Holder, UniqueID)
-import Data.X509.Attribute (Attributes)
+import Data.X509.Attribute (Attribute (..), Attributes (..), attrType, attrValues)
 import Data.X509.TCG.Component (ComponentIdentifier, ComponentIdentifierV2)
+import Data.X509.TCG.OID (tcg_at_componentIdentifier_v2, tcg_at_platformConfiguration_v2, tcg_at_tpmSpecification, tcg_at_tpmVersion)
 import Data.X509.TCG.Platform (ComponentStatus (..), PlatformConfigurationV2 (..))
 
 -- | Delta Platform Certificate Information structure
@@ -94,7 +106,42 @@ instance ASN1Object DeltaPlatformCertificateInfo where
         ++ [End Sequence]
     )
       ++ xs
-  fromASN1 _ = Left "Delta platform certificate parsing not implemented"
+  fromASN1 (Start Sequence : IntVal ver : rest) = do
+    (holder, rest1) <- fromASN1 rest
+    (issuer, rest2) <- fromASN1 rest1
+    (signature, rest3) <- fromASN1 rest2
+    case rest3 of
+      (IntVal serialNum : rest4) -> do
+        (validity, rest5) <- fromASN1 rest4
+        (attributes, rest6) <- fromASN1 rest5
+        let (uid, rest7) = extractUID rest6
+            (extensions, rest8) = extractExtensions rest7
+        (baseRef, rest9) <- fromASN1 rest8
+        case rest9 of
+          (End Sequence : remaining) ->
+            Right (DeltaPlatformCertificateInfo (fromIntegral ver) holder issuer signature serialNum validity attributes uid extensions baseRef, remaining)
+          _ -> Left "DeltaPlatformCertificateInfo: Invalid ASN1 sequence termination"
+      _ -> Left "DeltaPlatformCertificateInfo: Missing serial number"
+  fromASN1 _ = Left "DeltaPlatformCertificateInfo: Invalid ASN1 structure"
+
+-- Helper functions for ASN.1 parsing
+extractUID :: [ASN1] -> (Maybe UniqueID, [ASN1])
+extractUID (BitString uid : rest) = (Just uid, rest)
+extractUID rest = (Nothing, rest)
+
+extractExtensions :: [ASN1] -> (Extensions, [ASN1])
+extractExtensions asn1 = case fromASN1 asn1 of
+  Right (exts, rest) -> (exts, rest)
+  Left _ -> (Extensions Nothing, asn1) -- No extensions present
+
+extractHash :: [ASN1] -> (Maybe B.ByteString, [ASN1])
+extractHash (OctetString hash : rest) = (Just hash, rest)
+extractHash rest = (Nothing, rest)
+
+extractValidity :: [ASN1] -> (Maybe AttCertValidityPeriod, [ASN1])
+extractValidity asn1 = case fromASN1 asn1 of
+  Right (validity, rest) -> (Just validity, rest)
+  Left _ -> (Nothing, asn1)
 
 -- | A Signed Delta Platform Certificate
 type SignedDeltaPlatformCertificate = SignedExact DeltaPlatformCertificateInfo
@@ -174,11 +221,22 @@ instance ASN1Object BasePlatformCertificateRef where
         ++ toASN1 issuer []
         ++ [IntVal serial]
         ++ maybe [] (\h -> [OctetString h]) hash
-        ++ maybe [] (\v -> toASN1 v []) validity
+        ++ maybe [] (`toASN1` []) validity
         ++ [End Sequence]
     )
       ++ xs
-  fromASN1 _ = Left "BasePlatformCertificateRef parsing not implemented"
+  fromASN1 (Start Sequence : rest) = do
+    (issuer, rest1) <- fromASN1 rest
+    case rest1 of
+      (IntVal serial : rest2) -> do
+        let (hash, rest3) = extractHash rest2
+            (validity, rest4) = extractValidity rest3
+        case rest4 of
+          (End Sequence : remaining) ->
+            Right (BasePlatformCertificateRef issuer serial hash validity, remaining)
+          _ -> Left "BasePlatformCertificateRef: Invalid ASN1 sequence termination"
+      _ -> Left "BasePlatformCertificateRef: Missing serial number"
+  fromASN1 _ = Left "BasePlatformCertificateRef: Invalid ASN1 structure"
 
 -- | Certificate Chain structure
 --
@@ -312,23 +370,23 @@ getBaseCertificateReference cert = dpciBaseCertificateRef $ getDeltaPlatformCert
 -- @
 getPlatformConfigurationDelta :: SignedDeltaPlatformCertificate -> Maybe PlatformConfigurationDelta
 getPlatformConfigurationDelta cert =
-  case lookupDeltaAttribute "2.23.133.2.23" (dpciAttributes $ getDeltaPlatformCertificate cert) of
-    Just deltaConfig -> parseDeltaPlatformConfiguration deltaConfig
-    Nothing -> Nothing
+  maybe
+    Nothing
+    parseDeltaPlatformConfiguration
+    ( lookupDeltaAttribute
+        "2.23.133.2.23"
+        (dpciAttributes $ getDeltaPlatformCertificate cert)
+    )
 
 -- | Extract Component Deltas from a Delta Platform Certificate
 getComponentDeltas :: SignedDeltaPlatformCertificate -> [ComponentDelta]
 getComponentDeltas cert =
-  case getPlatformConfigurationDelta cert of
-    Just delta -> pcdComponentDeltas delta
-    Nothing -> []
+  maybe [] pcdComponentDeltas (getPlatformConfigurationDelta cert)
 
 -- | Extract Change Records from a Delta Platform Certificate
 getChangeRecords :: SignedDeltaPlatformCertificate -> [ChangeRecord]
 getChangeRecords cert =
-  case getPlatformConfigurationDelta cert of
-    Just delta -> pcdChangeRecords delta
-    Nothing -> []
+  maybe [] pcdChangeRecords (getPlatformConfigurationDelta cert)
 
 -- * Validation Functions
 
@@ -389,18 +447,72 @@ applyDeltaToBase baseConfig delta =
 
 -- | Compute the resulting configuration after applying delta certificates
 computeResultingConfiguration :: PlatformConfigurationV2 -> [PlatformConfigurationDelta] -> Either String PlatformConfigurationV2
-computeResultingConfiguration baseConfig deltas =
-  foldl (\acc delta -> acc >>= \config -> applyDeltaToBase config delta) (Right baseConfig) deltas
+computeResultingConfiguration baseConfig = foldl (\acc delta -> acc >>= \config -> applyDeltaToBase config delta) (Right baseConfig)
 
 -- Helper functions
 
 -- | Lookup delta-specific attribute by OID string
 lookupDeltaAttribute :: String -> Attributes -> Maybe B.ByteString
-lookupDeltaAttribute _ _ = Nothing -- TODO: Implement attribute lookup
+lookupDeltaAttribute oidStr (Attributes attrs) =
+  case parseOIDString oidStr of
+    Just targetOid ->
+      case find (\attr -> attrType attr == targetOid) attrs of
+        Just attr -> case attrValues attr of
+          [[OctetString value]] -> Just value -- Expecting single OctetString value
+          (values : _) -> case values of -- Take first value from first set
+            (value : _) -> case value of
+              OctetString bs -> Just bs
+              _ -> Nothing
+            [] -> Nothing
+          _ -> Nothing
+        Nothing -> Nothing
+    Nothing -> Nothing
+  where
+    parseOIDString :: String -> Maybe OID
+    parseOIDString str =
+      let parts = words $ map (\c -> if c == '.' then ' ' else c) str
+       in traverse readMaybe parts
+
+    readMaybe :: String -> Maybe Integer
+    readMaybe s = case reads s of
+      [(x, "")] -> Just x
+      _ -> Nothing
 
 -- | Parse Delta Platform Configuration from attribute value
 parseDeltaPlatformConfiguration :: B.ByteString -> Maybe PlatformConfigurationDelta
-parseDeltaPlatformConfiguration _ = Nothing -- TODO: Implement ASN.1 parsing
+parseDeltaPlatformConfiguration bs =
+  case decodeASN1' DER bs of
+    Left _ -> Nothing -- Invalid ASN.1 structure
+    Right asn1List -> parseDeltaFromASN1 asn1List
+  where
+    parseDeltaFromASN1 :: [ASN1] -> Maybe PlatformConfigurationDelta
+    parseDeltaFromASN1 (Start Sequence : rest) =
+      case parseOptionalPlatformInfo rest of
+        Just (platformInfo, rest') ->
+          case parseComponentDeltas rest' of
+            Just (componentDeltas, rest'') ->
+              case parseChangeRecords rest'' of
+                Just (changeRecords, End Sequence : _) ->
+                  Just $ PlatformConfigurationDelta platformInfo componentDeltas changeRecords
+                _ -> Nothing
+            Nothing -> Nothing
+        Nothing -> Nothing
+    parseDeltaFromASN1 _ = Nothing
+
+    parseOptionalPlatformInfo :: [ASN1] -> Maybe (Maybe PlatformInfoDelta, [ASN1])
+    parseOptionalPlatformInfo asn1List =
+      -- For now, assume no platform info changes (simplified implementation)
+      Just (Nothing, asn1List)
+
+    parseComponentDeltas :: [ASN1] -> Maybe ([ComponentDelta], [ASN1])
+    parseComponentDeltas asn1List =
+      -- For now, return empty component deltas (simplified implementation)
+      Just ([], asn1List)
+
+    parseChangeRecords :: [ASN1] -> Maybe ([ChangeRecord], [ASN1])
+    parseChangeRecords asn1List =
+      -- For now, return empty change records (simplified implementation)
+      Just ([], asn1List)
 
 -- | Validate base certificate reference
 validateBaseCertificateRef :: BasePlatformCertificateRef -> [String]
@@ -410,7 +522,21 @@ validateBaseCertificateRef baseRef
 
 -- | Validate delta attributes
 validateDeltaAttributes :: Attributes -> [String]
-validateDeltaAttributes _ = [] -- TODO: Implement validation
+validateDeltaAttributes (Attributes attrs)
+  | null attrs = ["Delta certificate must have at least one attribute"]
+  | otherwise = concatMap validateDeltaAttribute attrs
+  where
+    validateDeltaAttribute attr =
+      case attrType attr of
+        -- Platform Configuration Delta attribute is required
+        oid | oid == tcg_at_platformConfiguration_v2 -> []
+        -- Component identifiers are valid in delta certificates
+        oid | oid == tcg_at_componentIdentifier_v2 -> []
+        -- TPM version/spec can be included
+        oid | oid == tcg_at_tpmVersion -> []
+        oid | oid == tcg_at_tpmSpecification -> []
+        -- Other attributes should be validated based on specification
+        _ -> ["Unknown or invalid attribute in delta certificate: " ++ show (attrType attr)]
 
 -- Component manipulation helper functions
 addComponent :: PlatformConfigurationV2 -> ComponentIdentifierV2 -> PlatformConfigurationV2
@@ -445,7 +571,7 @@ updateComponent config component =
 -- ASN.1 instances for basic types
 
 instance ASN1Object DeltaOperation where
-  toASN1 op xs = [IntVal (fromIntegral $ fromEnum op)] ++ xs
+  toASN1 op xs = IntVal (fromIntegral $ fromEnum op) : xs
   fromASN1 (IntVal n : xs)
     | n >= 0 && n <= 4 = Right (toEnum (fromIntegral n), xs)
     | otherwise = Left "DeltaOperation: Invalid enum value"
@@ -453,17 +579,18 @@ instance ASN1Object DeltaOperation where
 
 instance ASN1Object ChangeType where
   toASN1 ct xs = case ct of
-    ChangeHardwareAddition -> [IntVal 0] ++ xs
-    ChangeHardwareRemoval -> [IntVal 1] ++ xs
-    ChangeHardwareReplacement -> [IntVal 2] ++ xs
-    ChangeFirmwareUpdate -> [IntVal 3] ++ xs
-    ChangeSoftwareInstallation -> [IntVal 4] ++ xs
-    ChangeSoftwareRemoval -> [IntVal 5] ++ xs
-    ChangeConfigurationUpdate -> [IntVal 6] ++ xs
-    ChangeSecurityUpdate -> [IntVal 7] ++ xs
-    ChangeMaintenance -> [IntVal 8] ++ xs
+    ChangeHardwareAddition -> IntVal 0 : xs
+    ChangeHardwareRemoval -> IntVal 1 : xs
+    ChangeHardwareReplacement -> IntVal 2 : xs
+    ChangeFirmwareUpdate -> IntVal 3 : xs
+    ChangeSoftwareInstallation -> IntVal 4 : xs
+    ChangeSoftwareRemoval -> IntVal 5 : xs
+    ChangeConfigurationUpdate -> IntVal 6 : xs
+    ChangeSecurityUpdate -> IntVal 7 : xs
+    ChangeMaintenance -> IntVal 8 : xs
     ChangeOther desc -> [IntVal 99, OctetString desc] ++ xs
-  
+
+  fromASN1 (IntVal 99 : OctetString desc : xs) = Right (ChangeOther desc, xs)
   fromASN1 (IntVal n : xs) = case n of
     0 -> Right (ChangeHardwareAddition, xs)
     1 -> Right (ChangeHardwareRemoval, xs)
@@ -474,7 +601,5 @@ instance ASN1Object ChangeType where
     6 -> Right (ChangeConfigurationUpdate, xs)
     7 -> Right (ChangeSecurityUpdate, xs)
     8 -> Right (ChangeMaintenance, xs)
-    99 -> Left "ChangeType: ChangeOther requires additional OctetString"
     _ -> Left "ChangeType: Invalid enum value"
-  fromASN1 (IntVal 99 : OctetString desc : xs) = Right (ChangeOther desc, xs)
   fromASN1 _ = Left "ChangeType: Invalid ASN1 structure"

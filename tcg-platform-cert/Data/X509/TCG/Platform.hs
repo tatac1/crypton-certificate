@@ -38,14 +38,23 @@ module Data.X509.TCG.Platform
     getPlatformInfo,
     getTPMInfo,
     getComponentStatus,
+
+    -- * Parsing Functions  
+    parsePlatformConfiguration,
+    parsePlatformConfigurationV2,
+    parseTPMVersion,
+    parseTPMSpecification,
   )
 where
 
 import Data.ASN1.Types
+import Data.ASN1.Encoding (decodeASN1')
+import Data.ASN1.BinaryEncoding (DER(..))
 import qualified Data.ByteString as B
-import Data.X509 (Extensions, SignatureALG, SignedExact, decodeSignedObject, encodeSignedObject, getSigned, signedObject)
+import Data.List (find)
+import Data.X509 (Extensions(..), SignatureALG, SignedExact, decodeSignedObject, encodeSignedObject, getSigned, signedObject)
 import Data.X509.AttCert (AttCertIssuer, AttCertValidityPeriod, Holder, UniqueID)
-import Data.X509.Attribute (AttributeValue, Attributes)
+import Data.X509.Attribute (AttributeValue, Attributes(..), Attribute(..), attrType, attrValues)
 import Data.X509.TCG.Component (ComponentIdentifier, ComponentIdentifierV2)
 
 -- | Platform Certificate Information structure
@@ -81,7 +90,32 @@ instance ASN1Object PlatformCertificateInfo where
         ++ [End Sequence]
     )
       ++ xs
-  fromASN1 _ = Left "Platform certificate parsing not implemented"
+  fromASN1 (Start Sequence : IntVal ver : rest) = do
+    (holder, rest1) <- fromASN1 rest
+    (issuer, rest2) <- fromASN1 rest1  
+    (signature, rest3) <- fromASN1 rest2
+    case rest3 of
+      (IntVal serialNum : rest4) -> do
+        (validity, rest5) <- fromASN1 rest4
+        (attributes, rest6) <- fromASN1 rest5
+        let (uid, rest7) = extractUID rest6
+            (extensions, rest8) = extractExtensions rest7
+        case rest8 of
+          (End Sequence : remaining) -> 
+            Right (PlatformCertificateInfo (fromIntegral ver) holder issuer signature serialNum validity attributes uid extensions, remaining)
+          _ -> Left "PlatformCertificateInfo: Invalid ASN1 sequence termination"
+      _ -> Left "PlatformCertificateInfo: Missing serial number"
+  fromASN1 _ = Left "PlatformCertificateInfo: Invalid ASN1 structure"
+
+-- Helper functions for ASN.1 parsing
+extractUID :: [ASN1] -> (Maybe UniqueID, [ASN1])
+extractUID (BitString uid : rest) = (Just uid, rest)
+extractUID rest = (Nothing, rest)
+
+extractExtensions :: [ASN1] -> (Extensions, [ASN1])
+extractExtensions asn1 = case fromASN1 asn1 of
+  Right (exts, rest) -> (exts, rest)
+  Left _ -> (Extensions Nothing, asn1)  -- No extensions present
 
 -- | A Signed Platform Certificate
 type SignedPlatformCertificate = SignedExact PlatformCertificateInfo
@@ -243,7 +277,29 @@ getComponentStatus cert = do
 --   Nothing -> handleMissingConfig
 -- @
 lookupAttribute :: String -> Attributes -> Maybe AttributeValue
-lookupAttribute _ _ = Nothing -- TODO: Implement attribute lookup
+lookupAttribute oidStr (Attributes attrs) = 
+  case parseOIDString oidStr of
+    Just targetOid -> 
+      case find (\attr -> attrType attr == targetOid) attrs of
+        Just attr -> case attrValues attr of
+          [[value]] -> Just value  -- Expecting single value
+          (values:_) -> case values of
+            (value:_) -> Just value  -- Take first value from first set
+            [] -> Nothing
+          _ -> Nothing
+        Nothing -> Nothing
+    Nothing -> Nothing
+  where
+    -- Parse OID string like "2.23.133.2.1" into OID list
+    parseOIDString :: String -> Maybe OID
+    parseOIDString str = 
+      let parts = words $ map (\c -> if c == '.' then ' ' else c) str
+      in traverse readMaybe parts
+    
+    readMaybe :: String -> Maybe Integer
+    readMaybe s = case reads s of
+      [(x, "")] -> Just x
+      _ -> Nothing
 
 -- | Extract attribute value as ByteString by OID
 --
@@ -270,8 +326,25 @@ lookupAttributeValue oid attrs = do
     _ -> Nothing
 
 -- | Parse Platform Configuration from AttributeValue
+--
+-- According to section 3.1.6 of the specification, the PlatformConfiguration
+-- structure is defined as:
+--
+-- PlatformConfiguration ::= SEQUENCE {
+--   platformManufacturer    UTF8String OPTIONAL,
+--   platformModel          UTF8String OPTIONAL, 
+--   platformVersion        UTF8String OPTIONAL,
+--   platformSerial         UTF8String OPTIONAL,
+--   components             SEQUENCE OF ComponentIdentifier OPTIONAL
+-- }
 parsePlatformConfiguration :: AttributeValue -> Maybe PlatformConfiguration
-parsePlatformConfiguration _ = Nothing -- TODO: Implement ASN.1 parsing
+parsePlatformConfiguration (OctetString bytes) = 
+  case decodeASN1' DER bytes of
+    Right asn1 -> case fromASN1 asn1 of
+      Right (config, []) -> Just config
+      _ -> Nothing
+    Left _ -> Nothing
+parsePlatformConfiguration _ = Nothing
 
 -- | Extract Platform Configuration v2 from a Platform Certificate
 getPlatformConfigurationV2 :: SignedPlatformCertificate -> Maybe PlatformConfigurationV2
@@ -281,18 +354,111 @@ getPlatformConfigurationV2 cert =
     Nothing -> Nothing
 
 -- | Parse Platform Configuration v2 from AttributeValue
+--
+-- According to section 3.1.7 of the specification, the PlatformConfigurationV2
+-- structure is defined as:
+--
+-- PlatformConfigurationV2 ::= SEQUENCE {
+--   platformManufacturer    UTF8String OPTIONAL,
+--   platformModel          UTF8String OPTIONAL, 
+--   platformVersion        UTF8String OPTIONAL,
+--   platformSerial         UTF8String OPTIONAL,
+--   components             SEQUENCE OF ComponentIdentifierV2 OPTIONAL
+-- }
 parsePlatformConfigurationV2 :: AttributeValue -> Maybe PlatformConfigurationV2
-parsePlatformConfigurationV2 _ = Nothing -- TODO: Implement ASN.1 parsing
+parsePlatformConfigurationV2 (OctetString bytes) = 
+  case decodeASN1' DER bytes of
+    Right asn1 -> case fromASN1 asn1 of
+      Right (config, []) -> Just config
+      _ -> Nothing
+    Left _ -> Nothing
+parsePlatformConfigurationV2 _ = Nothing
 
 -- | Parse TPM Version from ByteString
+--
+-- According to section 3.1.11 of the specification, the TPMVersion
+-- structure is defined as:
+--
+-- TPMVersion ::= SEQUENCE {
+--   major         INTEGER,
+--   minor         INTEGER,
+--   revMajor      INTEGER,
+--   revMinor      INTEGER
+-- }
 parseTPMVersion :: B.ByteString -> Maybe TPMVersion
-parseTPMVersion _ = Nothing -- TODO: Implement TPM version parsing
+parseTPMVersion bytes = 
+  case decodeASN1' DER bytes of
+    Right asn1 -> case fromASN1 asn1 of
+      Right (version, []) -> Just version
+      _ -> Nothing
+    Left _ -> Nothing
 
 -- | Parse TPM Specification from ByteString
+--
+-- According to section 3.1.12 of the specification, the TPMSpecification
+-- structure is defined as:
+--
+-- TPMSpecification ::= SEQUENCE {
+--   family        UTF8String,
+--   level         INTEGER,
+--   revision      INTEGER
+-- }
 parseTPMSpecification :: B.ByteString -> Maybe TPMSpecification
-parseTPMSpecification _ = Nothing -- TODO: Implement TPM specification parsing
+parseTPMSpecification bytes = 
+  case decodeASN1' DER bytes of
+    Right asn1 -> case fromASN1 asn1 of
+      Right (spec, []) -> Just spec
+      _ -> Nothing
+    Left _ -> Nothing
 
 -- ASN.1 instances for basic types
+
+instance ASN1Object PlatformConfiguration where
+  toASN1 (PlatformConfiguration manufacturer model version serial components) xs =
+    [Start Sequence, OctetString manufacturer, OctetString model, OctetString version, OctetString serial] 
+    ++ [Start Sequence] ++ concatMap (`toASN1` []) components ++ [End Sequence, End Sequence] ++ xs
+  fromASN1 (Start Sequence : OctetString manufacturer : OctetString model : OctetString version : OctetString serial : Start Sequence : rest) =
+    case parseComponentList rest of
+      Right (components, End Sequence : End Sequence : remaining) -> 
+        Right (PlatformConfiguration manufacturer model version serial components, remaining)
+      _ -> Left "PlatformConfiguration: Invalid component sequence"
+  fromASN1 _ = Left "PlatformConfiguration: Invalid ASN1 structure"
+
+-- Helper function to parse component list
+parseComponentList :: [ASN1] -> Either String ([ComponentIdentifier], [ASN1])
+parseComponentList asn1 = parseComponents asn1 []
+  where
+    parseComponents [] acc = Right (reverse acc, [])
+    parseComponents (End Sequence : rest) acc = Right (reverse acc, End Sequence : rest)
+    parseComponents remaining acc = 
+      case fromASN1 remaining of
+        Right (component, rest') -> parseComponents rest' (component : acc)
+        Left err -> Left err
+
+instance ASN1Object PlatformConfigurationV2 where
+  toASN1 (PlatformConfigurationV2 manufacturer model version serial components) xs =
+    [Start Sequence, OctetString manufacturer, OctetString model, OctetString version, OctetString serial] 
+    ++ [Start Sequence] ++ concatMap (\(comp, status) -> toASN1 comp [] ++ toASN1 status []) components ++ [End Sequence, End Sequence] ++ xs
+  fromASN1 (Start Sequence : OctetString manufacturer : OctetString model : OctetString version : OctetString serial : Start Sequence : rest) =
+    case parseComponentListV2 rest of
+      Right (components, End Sequence : End Sequence : remaining) -> 
+        Right (PlatformConfigurationV2 manufacturer model version serial components, remaining)
+      _ -> Left "PlatformConfigurationV2: Invalid component sequence"
+  fromASN1 _ = Left "PlatformConfigurationV2: Invalid ASN1 structure"
+
+-- Helper function to parse component list with status
+parseComponentListV2 :: [ASN1] -> Either String ([(ComponentIdentifierV2, ComponentStatus)], [ASN1])
+parseComponentListV2 asn1 = parseComponentsV2 asn1 []
+  where
+    parseComponentsV2 [] acc = Right (reverse acc, [])
+    parseComponentsV2 (End Sequence : rest) acc = Right (reverse acc, End Sequence : rest)
+    parseComponentsV2 remaining acc = 
+      case fromASN1 remaining of
+        Right (component, rest') -> 
+          case fromASN1 rest' of
+            Right (status, rest'') -> parseComponentsV2 rest'' ((component, status) : acc)
+            Left err -> Left err
+        Left err -> Left err
 
 instance ASN1Object TPMVersion where
   toASN1 (TPMVersion major minor revMajor revMinor) xs =
