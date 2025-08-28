@@ -283,7 +283,166 @@ validateComponentHierarchy hierarchy =
       | B.null (ci2Model component) = ["Component missing model"]
       | otherwise = []
 
--- ASN.1 instances will be implemented in a separate phase
--- instance ASN1Object ComponentIdentifier where ...
--- instance ASN1Object ComponentIdentifierV2 where ...
--- instance ASN1Object ComponentClass where ...
+-- ASN.1 instances
+
+instance ASN1Object ComponentIdentifier where
+  toASN1 (ComponentIdentifier manufacturer model serial revision mfgSerial mfgRevision) xs =
+    [Start Sequence, OctetString manufacturer, OctetString model]
+      ++ maybe [] (\s -> [OctetString s]) serial
+      ++ maybe [] (\r -> [OctetString r]) revision
+      ++ maybe [] (\ms -> [OctetString ms]) mfgSerial
+      ++ maybe [] (\mr -> [OctetString mr]) mfgRevision
+      ++ [End Sequence]
+      ++ xs
+  fromASN1 (Start Sequence : OctetString manufacturer : OctetString model : rest) =
+    parseOptionalFields rest manufacturer model Nothing Nothing Nothing Nothing
+    where
+      parseOptionalFields (End Sequence : remaining) mfg mdl ser rev mfgSer mfgRev =
+        Right (ComponentIdentifier mfg mdl ser rev mfgSer mfgRev, remaining)
+      parseOptionalFields (OctetString value : rest') mfg mdl Nothing Nothing Nothing Nothing =
+        parseOptionalFields rest' mfg mdl (Just value) Nothing Nothing Nothing
+      parseOptionalFields (OctetString value : rest') mfg mdl (Just ser) Nothing Nothing Nothing =
+        parseOptionalFields rest' mfg mdl (Just ser) (Just value) Nothing Nothing
+      parseOptionalFields (OctetString value : rest') mfg mdl (Just ser) (Just rev) Nothing Nothing =
+        parseOptionalFields rest' mfg mdl (Just ser) (Just rev) (Just value) Nothing
+      parseOptionalFields (OctetString value : rest') mfg mdl (Just ser) (Just rev) (Just mfgSer) Nothing =
+        parseOptionalFields rest' mfg mdl (Just ser) (Just rev) (Just mfgSer) (Just value)
+      parseOptionalFields _ _ _ _ _ _ _ = Left "ComponentIdentifier: Invalid ASN1 structure"
+  fromASN1 _ = Left "ComponentIdentifier: Invalid ASN1 structure"
+
+-- Helper function to parse ComponentIdentifierV2 optional fields
+parseComponentIdentifierV2Fields ::
+  B.ByteString ->
+  B.ByteString ->
+  [ASN1] ->
+  Either String (ComponentIdentifierV2, [ASN1])
+parseComponentIdentifierV2Fields manufacturer model (serialField : revisionField : mfgSerialField : mfgRevisionField : rest) =
+  let serial = case serialField of
+        Null -> Nothing
+        OctetString s -> Just s
+        _ -> Nothing
+      revision = case revisionField of
+        Null -> Nothing
+        OctetString r -> Just r
+        _ -> Nothing
+      mfgSerial = case mfgSerialField of
+        Null -> Nothing
+        OctetString ms -> Just ms
+        _ -> Nothing
+      mfgRevision = case mfgRevisionField of
+        Null -> Nothing
+        OctetString mr -> Just mr
+        _ -> Nothing
+   in do
+        (compClass, rest') <- fromASN1 rest
+        case rest' of
+          End Sequence : xs ->
+            Right (ComponentIdentifierV2 manufacturer model serial revision mfgSerial mfgRevision compClass Nothing, xs)
+          _ -> do
+            (compAddr, rest'') <- fromASN1 rest'
+            case rest'' of
+              End Sequence : xs ->
+                Right (ComponentIdentifierV2 manufacturer model serial revision mfgSerial mfgRevision compClass (Just compAddr), xs)
+              _ -> Left "ComponentIdentifierV2: Expected End Sequence"
+parseComponentIdentifierV2Fields _ _ _ =
+  Left "ComponentIdentifierV2: Expected exactly 4 optional fields (serial, revision, mfgSerial, mfgRevision)"
+
+instance ASN1Object ComponentIdentifierV2 where
+  toASN1 (ComponentIdentifierV2 manufacturer model serial revision mfgSerial mfgRevision compClass compAddr) xs =
+    [Start Sequence, OctetString manufacturer, OctetString model]
+      ++ [maybe Null OctetString serial]
+      ++ [maybe Null OctetString revision]
+      ++ [maybe Null OctetString mfgSerial]
+      ++ [maybe Null OctetString mfgRevision]
+      ++ toASN1 compClass []
+      ++ maybe [] (`toASN1` []) compAddr
+      ++ [End Sequence]
+      ++ xs
+  fromASN1 (Start Sequence : OctetString manufacturer : OctetString model : xs) =
+    parseComponentIdentifierV2Fields manufacturer model xs
+  fromASN1 _ = Left "ComponentIdentifierV2: Expected Start Sequence followed by two OctetStrings"
+
+instance ASN1Object ComponentClass where
+  toASN1 ComponentMotherboard xs = IntVal 1 : xs
+  toASN1 ComponentCPU xs = IntVal 2 : xs
+  toASN1 ComponentMemory xs = IntVal 3 : xs
+  toASN1 ComponentHardDrive xs = IntVal 4 : xs
+  toASN1 ComponentNetworkInterface xs = IntVal 5 : xs
+  toASN1 ComponentGraphicsCard xs = IntVal 6 : xs
+  toASN1 ComponentSoundCard xs = IntVal 7 : xs
+  toASN1 ComponentOpticalDrive xs = IntVal 8 : xs
+  toASN1 ComponentKeyboard xs = IntVal 9 : xs
+  toASN1 ComponentMouse xs = IntVal 10 : xs
+  toASN1 ComponentDisplay xs = IntVal 11 : xs
+  toASN1 ComponentSpeaker xs = IntVal 12 : xs
+  toASN1 ComponentMicrophone xs = IntVal 13 : xs
+  toASN1 ComponentCamera xs = IntVal 14 : xs
+  toASN1 ComponentTouchscreen xs = IntVal 15 : xs
+  toASN1 ComponentFingerprint xs = IntVal 16 : xs
+  toASN1 ComponentBluetooth xs = IntVal 21 : xs
+  toASN1 ComponentWifi xs = IntVal 22 : xs
+  toASN1 ComponentEthernet xs = IntVal 23 : xs
+  toASN1 ComponentUSB xs = IntVal 31 : xs
+  toASN1 ComponentFireWire xs = IntVal 32 : xs
+  toASN1 ComponentSCSI xs = IntVal 33 : xs
+  toASN1 ComponentIDE xs = IntVal 34 : xs
+  toASN1 (ComponentOther oid) xs = OID oid : xs
+  fromASN1 (IntVal n : xs) = case n of
+    1 -> Right (ComponentMotherboard, xs)
+    2 -> Right (ComponentCPU, xs)
+    3 -> Right (ComponentMemory, xs)
+    4 -> Right (ComponentHardDrive, xs)
+    5 -> Right (ComponentNetworkInterface, xs)
+    6 -> Right (ComponentGraphicsCard, xs)
+    7 -> Right (ComponentSoundCard, xs)
+    8 -> Right (ComponentOpticalDrive, xs)
+    9 -> Right (ComponentKeyboard, xs)
+    10 -> Right (ComponentMouse, xs)
+    11 -> Right (ComponentDisplay, xs)
+    12 -> Right (ComponentSpeaker, xs)
+    13 -> Right (ComponentMicrophone, xs)
+    14 -> Right (ComponentCamera, xs)
+    15 -> Right (ComponentTouchscreen, xs)
+    16 -> Right (ComponentFingerprint, xs)
+    21 -> Right (ComponentBluetooth, xs)
+    22 -> Right (ComponentWifi, xs)
+    23 -> Right (ComponentEthernet, xs)
+    31 -> Right (ComponentUSB, xs)
+    32 -> Right (ComponentFireWire, xs)
+    33 -> Right (ComponentSCSI, xs)
+    34 -> Right (ComponentIDE, xs)
+    _ -> Left "ComponentClass: Invalid enum value"
+  fromASN1 (OID oid : xs) = Right (ComponentOther oid, xs)
+  fromASN1 _ = Left "ComponentClass: Invalid ASN1 structure"
+
+instance ASN1Object ComponentAddress where
+  toASN1 (ComponentAddress addrType addr) xs =
+    [Start Sequence] ++ toASN1 addrType [] ++ [OctetString addr, End Sequence] ++ xs
+  fromASN1 (Start Sequence : xs) = do
+    (addrType, xs') <- fromASN1 xs
+    case xs' of
+      (OctetString addr : End Sequence : xs'') ->
+        Right (ComponentAddress addrType addr, xs'')
+      _ -> Left "ComponentAddress: Expected OctetString followed by End Sequence"
+  fromASN1 _ = Left "ComponentAddress: Expected Start Sequence"
+
+instance ASN1Object ComponentAddressType where
+  toASN1 AddressPCI xs = IntVal 1 : xs
+  toASN1 AddressUSB xs = IntVal 2 : xs
+  toASN1 AddressSATA xs = IntVal 3 : xs
+  toASN1 AddressI2C xs = IntVal 4 : xs
+  toASN1 AddressSPI xs = IntVal 5 : xs
+  toASN1 AddressMAC xs = IntVal 6 : xs
+  toASN1 AddressLogical xs = IntVal 7 : xs
+  toASN1 (AddressOther desc) xs = [IntVal 99, OctetString desc] ++ xs
+  fromASN1 (IntVal 99 : OctetString desc : xs) = Right (AddressOther desc, xs)
+  fromASN1 (IntVal n : xs) = case n of
+    1 -> Right (AddressPCI, xs)
+    2 -> Right (AddressUSB, xs)
+    3 -> Right (AddressSATA, xs)
+    4 -> Right (AddressI2C, xs)
+    5 -> Right (AddressSPI, xs)
+    6 -> Right (AddressMAC, xs)
+    7 -> Right (AddressLogical, xs)
+    _ -> Left "AddressType: Invalid enum value"
+  fromASN1 _ = Left "AddressType: Invalid ASN1 structure"

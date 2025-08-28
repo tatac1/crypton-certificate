@@ -24,6 +24,7 @@ import Test.Tasty.QuickCheck
 import Data.ASN1.Types (ASN1Object(..), ASN1)
 import Data.X509.TCG.Platform
 import Data.X509.TCG.Delta
+import Data.X509.TCG.Component
 import Tests.Arbitrary()
 
 -- | Property test for ASN.1 marshalling/unmarshalling roundtrip
@@ -128,6 +129,18 @@ tests = testGroup "ASN.1 Marshalling Properties"
             property_marshall_idempotent @ComponentStatus
         , testProperty "ComponentStatus roundtrip" $
             property_unmarshall_marshall_id @ComponentStatus
+        , testProperty "ComponentAddress marshalling idempotent" $
+            property_marshall_idempotent @ComponentAddress
+        , testProperty "ComponentAddress roundtrip" $
+            property_unmarshall_marshall_id @ComponentAddress
+        , testProperty "ComponentAddressType marshalling idempotent" $
+            property_marshall_idempotent @ComponentAddressType
+        , testProperty "ComponentAddressType roundtrip" $
+            property_unmarshall_marshall_id @ComponentAddressType
+        , testProperty "ComponentIdentifierV2 marshalling idempotent" $
+            property_marshall_idempotent @ComponentIdentifierV2
+        , testProperty "ComponentIdentifierV2 roundtrip" $
+            property_unmarshall_marshall_id @ComponentIdentifierV2
         ]
     ]
   , testGroup "Delta Certificate Types" 

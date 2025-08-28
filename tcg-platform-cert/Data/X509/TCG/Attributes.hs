@@ -48,6 +48,13 @@ module Data.X509.TCG.Attributes
     encodeTCGAttribute,
     lookupTCGAttribute,
     validateTCGAttributes,
+    parsePlatformConfigAttr,
+    parsePlatformConfigV2Attr,
+    parseComponentIdAttr,
+    parseComponentIdV2Attr,
+    parseTPMVersionAttr,
+    parseTPMSpecAttr,
+    parseRelevantCredAttr,
 
     -- * Attribute Utilities
     attributeOIDToType,
@@ -57,8 +64,11 @@ module Data.X509.TCG.Attributes
   )
 where
 
+import Data.ASN1.BinaryEncoding (DER (..))
+import Data.ASN1.Encoding (decodeASN1', encodeASN1)
 import Data.ASN1.Types
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as L
 import qualified Data.Map.Strict as Map
 import Data.X509.Attribute (Attribute (..), AttributeValue)
 import Data.X509.TCG.Component (ComponentClass, ComponentIdentifier, ComponentIdentifierV2)
@@ -358,19 +368,56 @@ isCriticalAttribute oid = oid `elem` criticalAttributes
 -- Helper functions for parsing individual attribute types
 
 parsePlatformConfigAttr :: [[AttributeValue]] -> Either String TCGAttribute
-parsePlatformConfigAttr _ = Left "Platform Configuration parsing not yet implemented"
+parsePlatformConfigAttr [[OctetString bs]] = do
+  -- Parse ASN.1 DER encoded Platform Configuration
+  case decodeASN1' DER bs of
+    Left err -> Left $ "Failed to decode Platform Configuration ASN.1: " ++ show err
+    Right asn1 ->
+      case fromASN1 asn1 of
+        Left err -> Left $ "Failed to parse Platform Configuration: " ++ err
+        Right (config, _) ->
+          Right $ TCGPlatformConfiguration (PlatformConfigurationAttr config Nothing Nothing)
+parsePlatformConfigAttr _ = Left "Invalid Platform Configuration attribute format - expected single OctetString"
 
 parsePlatformConfigV2Attr :: [[AttributeValue]] -> Either String TCGAttribute
-parsePlatformConfigV2Attr _ = Left "Platform Configuration v2 parsing not yet implemented"
+parsePlatformConfigV2Attr [[OctetString bs]] = case decodeASN1' DER bs of
+  Left err -> Left $ "Failed to decode Platform Configuration v2 ASN.1: " ++ show err
+  Right asn1 ->
+    case fromASN1 asn1 of
+      Left err -> Left $ "Failed to parse Platform Configuration v2: " ++ err
+      Right (config, _) ->
+        Right $ TCGPlatformConfigurationV2 (PlatformConfigurationV2Attr config Nothing Nothing Nothing)
+parsePlatformConfigV2Attr _ = Left "Invalid Platform Configuration v2 attribute format - expected single OctetString"
 
 parseComponentIdAttr :: [[AttributeValue]] -> Either String TCGAttribute
-parseComponentIdAttr _ = Left "Component Identifier parsing not yet implemented"
+parseComponentIdAttr [[OctetString bs]] = case decodeASN1' DER bs of
+  Left err -> Left $ "Failed to decode Component Identifier ASN.1: " ++ show err
+  Right asn1 ->
+    case fromASN1 asn1 of
+      Left err -> Left $ "Failed to parse Component Identifier: " ++ err
+      Right (identifier, _) ->
+        Right $ TCGComponentIdentifier (ComponentIdentifierAttr identifier Nothing)
+parseComponentIdAttr _ = Left "Invalid Component Identifier attribute format - expected single OctetString"
 
 parseComponentIdV2Attr :: [[AttributeValue]] -> Either String TCGAttribute
-parseComponentIdV2Attr _ = Left "Component Identifier v2 parsing not yet implemented"
+parseComponentIdV2Attr [[OctetString bs]] = case decodeASN1' DER bs of
+  Left err -> Left $ "Failed to decode Component Identifier v2 ASN.1: " ++ show err
+  Right asn1 ->
+    case fromASN1 asn1 of
+      Left err -> Left $ "Failed to parse Component Identifier v2: " ++ err
+      Right (identifier, _) ->
+        Right $ TCGComponentIdentifierV2 (ComponentIdentifierV2Attr identifier Nothing Nothing)
+parseComponentIdV2Attr _ = Left "Invalid Component Identifier v2 attribute format - expected single OctetString"
 
 parseComponentClassAttr :: [[AttributeValue]] -> Either String TCGAttribute
-parseComponentClassAttr _ = Left "Component Class parsing not yet implemented"
+parseComponentClassAttr [[OctetString bs]] = case decodeASN1' DER bs of
+  Left err -> Left $ "Failed to decode Component Class ASN.1: " ++ show err
+  Right asn1 ->
+    case fromASN1 asn1 of
+      Left err -> Left $ "Failed to parse Component Class: " ++ err
+      Right (componentClass, _) ->
+        Right $ TCGComponentClass (ComponentClassAttr componentClass Nothing)
+parseComponentClassAttr _ = Left "Invalid Component Class attribute format - expected single OctetString"
 
 parsePlatformMfgAttr :: [[AttributeValue]] -> Either String TCGAttribute
 parsePlatformMfgAttr [[OctetString bs]] = Right $ TCGPlatformManufacturer (PlatformManufacturerAttr bs)
@@ -393,22 +440,146 @@ parseTPMModelAttr [[OctetString bs]] = Right $ TCGTPMModel (TPMModelAttr bs)
 parseTPMModelAttr _ = Left "Invalid TPM Model attribute"
 
 parseTPMVersionAttr :: [[AttributeValue]] -> Either String TCGAttribute
-parseTPMVersionAttr _ = Left "TPM Version parsing not yet implemented"
+parseTPMVersionAttr [[OctetString bs]] = case decodeASN1' DER bs of
+  Left err -> Left $ "Failed to decode TPM Version ASN.1: " ++ show err
+  Right asn1 ->
+    case fromASN1 asn1 of
+      Left err -> Left $ "Failed to parse TPM Version: " ++ err
+      Right (version, _) ->
+        Right $ TCGTPMVersion (TPMVersionAttr version)
+parseTPMVersionAttr _ = Left "Invalid TPM Version attribute format - expected single OctetString"
 
 parseTPMSpecAttr :: [[AttributeValue]] -> Either String TCGAttribute
-parseTPMSpecAttr _ = Left "TPM Specification parsing not yet implemented"
+parseTPMSpecAttr [[OctetString bs]] = case decodeASN1' DER bs of
+  Left err -> Left $ "Failed to decode TPM Specification ASN.1: " ++ show err
+  Right asn1 ->
+    case fromASN1 asn1 of
+      Left err -> Left $ "Failed to parse TPM Specification: " ++ err
+      Right (spec, _) ->
+        Right $ TCGTPMSpecification (TPMSpecificationAttr spec)
+parseTPMSpecAttr _ = Left "Invalid TPM Specification attribute format - expected single OctetString"
 
 parseRelevantCredAttr :: [[AttributeValue]] -> Either String TCGAttribute
-parseRelevantCredAttr _ = Left "Relevant Credentials parsing not yet implemented"
+parseRelevantCredAttr [[OctetString bs]] = case decodeASN1' DER bs of
+  Left err -> Left $ "Failed to decode Relevant Credentials ASN.1: " ++ show err
+  Right asn1 ->
+    case parseRelevantCredentialsASN1 asn1 of
+      Left err -> Left $ "Failed to parse Relevant Credentials: " ++ err
+      Right attr ->
+        Right $ TCGRelevantCredentials attr
+parseRelevantCredAttr _ = Left "Invalid Relevant Credentials attribute format - expected single OctetString"
+
+-- Helper function to parse RelevantCredentialsAttr from ASN.1
+parseRelevantCredentialsASN1 :: [ASN1] -> Either String RelevantCredentialsAttr
+parseRelevantCredentialsASN1 (Start Sequence : inner) =
+  parseRelevantCredentialsInner inner []
+parseRelevantCredentialsASN1 _ = Left "Expected Sequence for RelevantCredentials"
+
+parseRelevantCredentialsInner :: [ASN1] -> [B.ByteString] -> Either String RelevantCredentialsAttr
+parseRelevantCredentialsInner (Start Sequence : rest) credentials = do
+  -- Parse the sequence of credential OctetStrings
+  (credList, remaining) <- parseCredentialSequence rest []
+  case remaining of
+    Boolean critical : End Sequence : _ ->
+      Right $ RelevantCredentialsAttr (credentials ++ credList) critical
+    End Sequence : _ ->
+      Right $ RelevantCredentialsAttr (credentials ++ credList) False -- Default to non-critical
+    _ -> Left "Invalid RelevantCredentials structure after credentials sequence"
+parseRelevantCredentialsInner (OctetString cred : rest) credentials =
+  parseRelevantCredentialsInner rest (credentials ++ [cred])
+parseRelevantCredentialsInner (Boolean critical : End Sequence : _) credentials =
+  Right $ RelevantCredentialsAttr credentials critical
+parseRelevantCredentialsInner (End Sequence : _) credentials =
+  Right $ RelevantCredentialsAttr credentials False -- Default to non-critical
+parseRelevantCredentialsInner _ _ = Left "Unexpected ASN.1 in RelevantCredentials"
+
+parseCredentialSequence :: [ASN1] -> [B.ByteString] -> Either String ([B.ByteString], [ASN1])
+parseCredentialSequence (OctetString cred : rest) acc =
+  parseCredentialSequence rest (acc ++ [cred])
+parseCredentialSequence (End Sequence : rest) acc =
+  Right (acc, rest)
+parseCredentialSequence _ _ = Left "Invalid credential sequence"
 
 parseRelevantManiAttr :: [[AttributeValue]] -> Either String TCGAttribute
-parseRelevantManiAttr _ = Left "Relevant Manifests parsing not yet implemented"
+parseRelevantManiAttr [[OctetString bs]] = case decodeASN1' DER bs of
+  Left err -> Left $ "Failed to decode Relevant Manifests ASN.1: " ++ show err
+  Right asn1 ->
+    case parseRelevantManifestsASN1 asn1 of
+      Left err -> Left $ "Failed to parse Relevant Manifests: " ++ err
+      Right attr ->
+        Right $ TCGRelevantManifests attr
+parseRelevantManiAttr _ = Left "Invalid Relevant Manifests attribute format - expected single OctetString"
+
+-- Helper function to parse RelevantManifestsAttr from ASN.1
+parseRelevantManifestsASN1 :: [ASN1] -> Either String RelevantManifestsAttr
+parseRelevantManifestsASN1 (Start Sequence : inner) =
+  parseRelevantManifestsInner inner []
+parseRelevantManifestsASN1 _ = Left "Expected Sequence for RelevantManifests"
+
+parseRelevantManifestsInner :: [ASN1] -> [B.ByteString] -> Either String RelevantManifestsAttr
+parseRelevantManifestsInner (Start Sequence : rest) manifests = do
+  -- Parse the sequence of manifest OctetStrings
+  (manifList, remaining) <- parseManifestSequence rest []
+  case remaining of
+    Boolean critical : End Sequence : _ ->
+      Right $ RelevantManifestsAttr (manifests ++ manifList) critical
+    End Sequence : _ ->
+      Right $ RelevantManifestsAttr (manifests ++ manifList) False -- Default to non-critical
+    _ -> Left "Invalid RelevantManifests structure after manifests sequence"
+parseRelevantManifestsInner (OctetString manifest : rest) manifests =
+  parseRelevantManifestsInner rest (manifests ++ [manifest])
+parseRelevantManifestsInner (Boolean critical : End Sequence : _) manifests =
+  Right $ RelevantManifestsAttr manifests critical
+parseRelevantManifestsInner (End Sequence : _) manifests =
+  Right $ RelevantManifestsAttr manifests False -- Default to non-critical
+parseRelevantManifestsInner _ _ = Left "Unexpected ASN.1 in RelevantManifests"
+
+parseManifestSequence :: [ASN1] -> [B.ByteString] -> Either String ([B.ByteString], [ASN1])
+parseManifestSequence (OctetString manifest : rest) acc =
+  parseManifestSequence rest (acc ++ [manifest])
+parseManifestSequence (End Sequence : rest) acc =
+  Right (acc, rest)
+parseManifestSequence _ _ = Left "Invalid manifest sequence"
 
 parseVirtualPlatAttr :: [[AttributeValue]] -> Either String TCGAttribute
-parseVirtualPlatAttr _ = Left "Virtual Platform parsing not yet implemented"
+parseVirtualPlatAttr [[OctetString encoded]] = do
+  asn1List <- case decodeASN1' DER encoded of
+    Left err -> Left $ "Failed to decode VirtualPlatform ASN.1: " ++ show err
+    Right asn1 -> Right asn1
+  case asn1List of
+    [Start Sequence, Boolean isVirtual, Boolean critical, End Sequence] ->
+      Right $ TCGVirtualPlatform (VirtualPlatformAttr isVirtual Nothing critical)
+    [Start Sequence, Boolean isVirtual, OctetString hypervisorInfo, Boolean critical, End Sequence] ->
+      Right $ TCGVirtualPlatform (VirtualPlatformAttr isVirtual (Just hypervisorInfo) critical)
+    _ -> Left "Invalid VirtualPlatform attribute format"
+parseVirtualPlatAttr _ = Left "Invalid Virtual Platform attribute format - expected single OctetString"
 
 parseMultiTenantAttr :: [[AttributeValue]] -> Either String TCGAttribute
-parseMultiTenantAttr _ = Left "Multi-Tenant parsing not yet implemented"
+parseMultiTenantAttr [[OctetString encoded]] = do
+  asn1List <- case decodeASN1' DER encoded of
+    Left err -> Left $ "Failed to decode MultiTenant ASN.1: " ++ show err
+    Right asn1 -> Right asn1
+  case asn1List of
+    [Start Sequence, Boolean isMultiTenant, Boolean critical, End Sequence] ->
+      Right $ TCGMultiTenant (MultiTenantAttr isMultiTenant Nothing critical)
+    (Start Sequence : Boolean isMultiTenant : tenantInfoStart) ->
+      case parseTenantInfoSequence tenantInfoStart of
+        Right (tenantInfo, [Boolean critical, End Sequence]) ->
+          Right $ TCGMultiTenant (MultiTenantAttr isMultiTenant (Just tenantInfo) critical)
+        _ -> Left "Invalid MultiTenant attribute format"
+    _ -> Left "Invalid MultiTenant attribute format"
+  where
+    parseTenantInfoSequence :: [ASN1] -> Either String ([B.ByteString], [ASN1])
+    parseTenantInfoSequence (Start Sequence : rest) =
+      parseTenantList rest []
+    parseTenantInfoSequence other = Right ([], other)
+
+    parseTenantList :: [ASN1] -> [B.ByteString] -> Either String ([B.ByteString], [ASN1])
+    parseTenantList (End Sequence : rest) acc = Right (reverse acc, rest)
+    parseTenantList (OctetString tenantInfo : rest) acc =
+      parseTenantList rest (tenantInfo : acc)
+    parseTenantList _ _ = Left "Invalid tenant info sequence"
+parseMultiTenantAttr _ = Left "Invalid Multi-Tenant attribute format - expected single OctetString"
 
 parseOtherAttr :: OID -> [[AttributeValue]] -> Either String TCGAttribute
 parseOtherAttr oid [[OctetString bs]] = Right $ TCGOtherAttribute oid bs
@@ -417,22 +588,51 @@ parseOtherAttr oid _ = Left $ "Invalid other attribute with OID: " ++ show oid
 -- Helper functions for encoding individual attribute types
 
 encodeAttribute :: OID -> [[AttributeValue]] -> Attribute
-encodeAttribute oid values = Attribute oid values
+encodeAttribute = Attribute
 
 encodePlatformConfigAttr :: PlatformConfigurationAttr -> [AttributeValue]
-encodePlatformConfigAttr _ = [OctetString B.empty] -- TODO: Implement encoding
+encodePlatformConfigAttr (PlatformConfigurationAttr config mTimestamp mCertLevel) =
+  let configASN1 = toASN1 config []
+      timestampASN1 = maybe [] (\ts -> [OctetString ts]) mTimestamp
+      certLevelASN1 = maybe [] (\cl -> [IntVal (fromIntegral cl)]) mCertLevel
+      fullASN1 = [Start Sequence] ++ configASN1 ++ timestampASN1 ++ certLevelASN1 ++ [End Sequence]
+      encoded = L.toStrict $ encodeASN1 DER fullASN1
+   in [OctetString encoded]
 
 encodePlatformConfigV2Attr :: PlatformConfigurationV2Attr -> [AttributeValue]
-encodePlatformConfigV2Attr _ = [OctetString B.empty] -- TODO: Implement encoding
+encodePlatformConfigV2Attr (PlatformConfigurationV2Attr config mTimestamp mCertLevel mChangeSeq) =
+  let configASN1 = toASN1 config []
+      timestampASN1 = maybe [] (\ts -> [OctetString ts]) mTimestamp
+      certLevelASN1 = maybe [] (\cl -> [IntVal (fromIntegral cl)]) mCertLevel
+      changeSeqASN1 = maybe [] (\cs -> [IntVal cs]) mChangeSeq
+      fullASN1 = [Start Sequence] ++ configASN1 ++ timestampASN1 ++ certLevelASN1 ++ changeSeqASN1 ++ [End Sequence]
+      encoded = L.toStrict $ encodeASN1 DER fullASN1
+   in [OctetString encoded]
 
 encodeComponentIdAttr :: ComponentIdentifierAttr -> [AttributeValue]
-encodeComponentIdAttr _ = [OctetString B.empty] -- TODO: Implement encoding
+encodeComponentIdAttr (ComponentIdentifierAttr identifier mTimestamp) =
+  let idASN1 = toASN1 identifier []
+      timestampASN1 = maybe [] (\ts -> [OctetString ts]) mTimestamp
+      fullASN1 = [Start Sequence] ++ idASN1 ++ timestampASN1 ++ [End Sequence]
+      encoded = L.toStrict $ encodeASN1 DER fullASN1
+   in [OctetString encoded]
 
 encodeComponentIdV2Attr :: ComponentIdentifierV2Attr -> [AttributeValue]
-encodeComponentIdV2Attr _ = [OctetString B.empty] -- TODO: Implement encoding
+encodeComponentIdV2Attr (ComponentIdentifierV2Attr identifier mTimestamp mCertInfo) =
+  let idASN1 = toASN1 identifier []
+      timestampASN1 = maybe [] (\ts -> [OctetString ts]) mTimestamp
+      certInfoASN1 = maybe [] (\ci -> [OctetString ci]) mCertInfo
+      fullASN1 = [Start Sequence] ++ idASN1 ++ timestampASN1 ++ certInfoASN1 ++ [End Sequence]
+      encoded = L.toStrict $ encodeASN1 DER fullASN1
+   in [OctetString encoded]
 
 encodeComponentClassAttr :: ComponentClassAttr -> [AttributeValue]
-encodeComponentClassAttr _ = [OctetString B.empty] -- TODO: Implement encoding
+encodeComponentClassAttr (ComponentClassAttr compClass mDescription) =
+  let classASN1 = toASN1 compClass []
+      descASN1 = maybe [] (\desc -> [OctetString desc]) mDescription
+      fullASN1 = [Start Sequence] ++ classASN1 ++ descASN1 ++ [End Sequence]
+      encoded = L.toStrict $ encodeASN1 DER fullASN1
+   in [OctetString encoded]
 
 encodePlatformMfgAttr :: PlatformManufacturerAttr -> [AttributeValue]
 encodePlatformMfgAttr (PlatformManufacturerAttr bs) = [OctetString bs]
@@ -450,22 +650,50 @@ encodeTPMModelAttr :: TPMModelAttr -> [AttributeValue]
 encodeTPMModelAttr (TPMModelAttr bs) = [OctetString bs]
 
 encodeTPMVersionAttr :: TPMVersionAttr -> [AttributeValue]
-encodeTPMVersionAttr _ = [OctetString B.empty] -- TODO: Implement encoding
+encodeTPMVersionAttr (TPMVersionAttr version) =
+  let versionASN1 = toASN1 version []
+      encoded = L.toStrict $ encodeASN1 DER versionASN1
+   in [OctetString encoded]
 
 encodeTPMSpecAttr :: TPMSpecificationAttr -> [AttributeValue]
-encodeTPMSpecAttr _ = [OctetString B.empty] -- TODO: Implement encoding
+encodeTPMSpecAttr (TPMSpecificationAttr spec) =
+  let specASN1 = toASN1 spec []
+      encoded = L.toStrict $ encodeASN1 DER specASN1
+   in [OctetString encoded]
 
 encodeRelevantCredAttr :: RelevantCredentialsAttr -> [AttributeValue]
-encodeRelevantCredAttr _ = [OctetString B.empty] -- TODO: Implement encoding
+encodeRelevantCredAttr (RelevantCredentialsAttr credentials critical) =
+  let credASN1 = [Start Sequence] ++ map OctetString credentials ++ [End Sequence]
+      criticalASN1 = [Boolean critical]
+      fullASN1 = [Start Sequence] ++ credASN1 ++ criticalASN1 ++ [End Sequence]
+      encoded = L.toStrict $ encodeASN1 DER fullASN1
+   in [OctetString encoded]
 
 encodeRelevantManiAttr :: RelevantManifestsAttr -> [AttributeValue]
-encodeRelevantManiAttr _ = [OctetString B.empty] -- TODO: Implement encoding
+encodeRelevantManiAttr (RelevantManifestsAttr manifests critical) =
+  let manifASN1 = [Start Sequence] ++ map OctetString manifests ++ [End Sequence]
+      criticalASN1 = [Boolean critical]
+      fullASN1 = [Start Sequence] ++ manifASN1 ++ criticalASN1 ++ [End Sequence]
+      encoded = L.toStrict $ encodeASN1 DER fullASN1
+   in [OctetString encoded]
 
 encodeVirtualPlatAttr :: VirtualPlatformAttr -> [AttributeValue]
-encodeVirtualPlatAttr _ = [OctetString B.empty] -- TODO: Implement encoding
+encodeVirtualPlatAttr (VirtualPlatformAttr isVirtual mHypervisorInfo critical) =
+  let virtualASN1 = [Boolean isVirtual]
+      hypervisorASN1 = maybe [] (\info -> [OctetString info]) mHypervisorInfo
+      criticalASN1 = [Boolean critical]
+      fullASN1 = [Start Sequence] ++ virtualASN1 ++ hypervisorASN1 ++ criticalASN1 ++ [End Sequence]
+      encoded = L.toStrict $ encodeASN1 DER fullASN1
+   in [OctetString encoded]
 
 encodeMultiTenantAttr :: MultiTenantAttr -> [AttributeValue]
-encodeMultiTenantAttr _ = [OctetString B.empty] -- TODO: Implement encoding
+encodeMultiTenantAttr (MultiTenantAttr isMultiTenant mTenantInfo critical) =
+  let multiTenantASN1 = [Boolean isMultiTenant]
+      tenantInfoASN1 = maybe [] (\infos -> [Start Sequence] ++ map OctetString infos ++ [End Sequence]) mTenantInfo
+      criticalASN1 = [Boolean critical]
+      fullASN1 = [Start Sequence] ++ multiTenantASN1 ++ tenantInfoASN1 ++ criticalASN1 ++ [End Sequence]
+      encoded = L.toStrict $ encodeASN1 DER fullASN1
+   in [OctetString encoded]
 
 -- Helper functions for validation
 
@@ -504,7 +732,25 @@ validateSingleAttribute :: TCGAttribute -> [String]
 validateSingleAttribute attr =
   case attr of
     TCGPlatformManufacturer (PlatformManufacturerAttr bs) ->
-      if B.null bs then ["Platform Manufacturer cannot be empty"] else []
+      (["Platform Manufacturer cannot be empty" | B.null bs])
     TCGPlatformModel (PlatformModelAttr bs) ->
-      if B.null bs then ["Platform Model cannot be empty"] else []
-    _ -> [] -- TODO: Add validation for other attribute types
+      (["Platform Model cannot be empty" | B.null bs])
+    TCGPlatformSerial (PlatformSerialAttr bs) ->
+      (["Platform Serial cannot be empty" | B.null bs])
+    TCGPlatformVersion (PlatformVersionAttr bs) ->
+      (["Platform Version cannot be empty" | B.null bs])
+    TCGTPMModel (TPMModelAttr bs) ->
+      (["TPM Model cannot be empty" | B.null bs])
+    TCGComponentIdentifier _ -> [] -- Component identifier validation would need detailed implementation
+    TCGComponentIdentifierV2 _ -> [] -- Component identifier V2 validation would need detailed implementation
+    TCGPlatformConfiguration _ -> [] -- Platform configuration validation would need detailed implementation
+    TCGPlatformConfigurationV2 _ -> [] -- Platform configuration V2 validation would need detailed implementation
+    TCGTPMVersion _ -> [] -- TPM version validation would need detailed implementation
+    TCGTPMSpecification _ -> [] -- TPM specification validation would need detailed implementation
+    TCGRelevantCredentials _ -> [] -- Relevant credentials validation would need detailed implementation
+    TCGRelevantManifests _ -> [] -- Relevant manifests validation would need detailed implementation
+    TCGVirtualPlatform _ -> [] -- Virtual platform attributes are always valid
+    TCGMultiTenant _ -> [] -- Multi-tenant attributes are always valid
+    TCGComponentClass _ -> [] -- Component class attributes are always valid
+    TCGOtherAttribute _ bs ->
+      (["Custom attribute value cannot be empty" | B.null bs])
