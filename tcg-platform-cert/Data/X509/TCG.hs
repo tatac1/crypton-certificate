@@ -351,7 +351,7 @@ buildPlatformCertificateInfoWithValidity ::
   AttCertValidityPeriod ->
   Certificate -> -- TPM EK Certificate
   Either String PlatformCertificateInfo
-buildPlatformCertificateInfoWithValidity config components tpmInfo validity ekCert = do
+buildPlatformCertificateInfoWithValidity config components tpmInfo validity ekCert =
   -- Create holder referencing TPM EK certificate (secure by default)
   -- Use ObjectDigestInfo with public key hash to prevent CA name collision attacks
   let pubKeyBytes = encodeASN1' DER $ toASN1 (certPubKey ekCert) []
@@ -364,26 +364,52 @@ buildPlatformCertificateInfoWithValidity config components tpmInfo validity ekCe
         }
       holder = HolderObjectDigestInfo objectDigestInfo
 
-  -- Create a simple issuer (V2 form) with proper issuer name
-  let cnOid = [2, 5, 4, 3] -- Common Name OID
-      issuerDN = DistinguishedName [(cnOid, asn1CharacterString UTF8 "TCG Platform Certificate Issuer")]
+      -- Create a simple issuer (V2 form) with proper issuer name
+      -- RFC 5755 requires exactly one GeneralName in issuerName, and it must be a directoryName
+      cnOid = [2, 5, 4, 3] -- Common Name OID  
+      ouOid = [2, 5, 4, 11] -- Organization Unit OID
+      oOid = [2, 5, 4, 10]  -- Organization OID
+      issuerDN = DistinguishedName 
+        [ (cnOid, ASN1CharacterString UTF8 (B8.pack "TCG Platform Certificate Issuer"))
+        , (ouOid, ASN1CharacterString UTF8 (B8.pack "Platform Certificate Authority")) 
+        , (oOid, ASN1CharacterString UTF8 (B8.pack "TCG Organization"))
+        ]
       acIssuer = AttCertIssuerV2 (V2Form [AltDirectoryName issuerDN] Nothing Nothing)
 
   -- Create attributes from config, components, and TPM info
-  attrs <- buildAttributesFromConfig config components tpmInfo
+  in case buildAttributesFromConfig config components tpmInfo of
+       Left err -> Left err
+       Right attrs -> Right $
+         PlatformCertificateInfo
+           { pciVersion = 2, -- v2 certificate
+             pciHolder = holder,
+             pciIssuer = acIssuer,
+             pciSignature = SignatureALG HashSHA256 PubKeyALG_RSA,
+             pciSerialNumber = 1, -- Simple serial number
+             pciValidity = validity,
+             pciAttributes = attrs,
+             pciIssuerUniqueID = Nothing,
+             pciExtensions = Extensions Nothing
+           }
 
-  return $
-    PlatformCertificateInfo
-      { pciVersion = 2, -- v2 certificate
-        pciHolder = holder,
-        pciIssuer = acIssuer,
-        pciSignature = SignatureALG HashSHA256 PubKeyALG_RSA,
-        pciSerialNumber = 1, -- Simple serial number
-        pciValidity = validity,
-        pciAttributes = attrs,
-        pciIssuerUniqueID = Nothing,
-        pciExtensions = Extensions Nothing
-      }
+-- | Convert all ComponentIdentifiers to a single componentIdentifier_v2 attribute
+componentsToAttribute :: [ComponentIdentifier] -> [Attribute]
+componentsToAttribute [] = []
+componentsToAttribute components =
+  [Attribute tcg_at_componentIdentifier_v2 [componentListToASN1 components]]
+  where
+    componentListToASN1 comps = [Start Sequence] ++ concatMap componentToASN1 comps ++ [End Sequence]
+    componentToASN1 comp = 
+      [Start Sequence,
+       OctetString (ciManufacturer comp),
+       OctetString (ciModel comp)] ++
+      (case ciSerial comp of
+         Just serial -> [OctetString serial]
+         Nothing -> [Null]) ++
+      (case ciRevision comp of
+         Just revision -> [OctetString revision]
+         Nothing -> [Null]) ++
+      [End Sequence]
 
 -- | Helper function to build attributes from configuration data
 buildAttributesFromConfig ::
@@ -391,14 +417,17 @@ buildAttributesFromConfig ::
   [ComponentIdentifier] ->
   TPMInfo ->
   Either String Attributes
-buildAttributesFromConfig config _components _tpmInfo = do
+buildAttributesFromConfig config components _tpmInfo = do
   -- Create basic platform attributes
   let manufacturerAttr = Attribute tcg_at_platformManufacturer [[OctetString (pcManufacturer config)]]
       modelAttr = Attribute tcg_at_platformModel [[OctetString (pcModel config)]]
       serialAttr = Attribute tcg_at_platformSerial [[OctetString (pcSerial config)]]
       versionAttr = Attribute tcg_at_platformVersion [[OctetString (pcVersion config)]]
 
-  return $ Attributes [manufacturerAttr, modelAttr, serialAttr, versionAttr]
+      -- Create component attributes from the component identifiers
+      componentAttrs = componentsToAttribute components
+      
+  return $ Attributes ([manufacturerAttr, modelAttr, serialAttr, versionAttr] ++ componentAttrs)
 
 -- | Dummy signing function for testing purposes
 -- In production, replace with proper cryptographic signing

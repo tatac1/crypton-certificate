@@ -42,6 +42,17 @@ module Data.X509.TCG.Attributes
     RelevantManifestsAttr (..),
     VirtualPlatformAttr (..),
     MultiTenantAttr (..),
+    
+    -- * Extended Platform Attributes (IWG v1.1)
+    PlatformConfigUriAttr (..),
+    PlatformClassAttr (..),
+    CertificationLevelAttr (..),
+    PlatformQualifiersAttr (..),
+    RootOfTrustAttr (..),
+    RTMTypeAttr (..),
+    BootModeAttr (..),
+    FirmwareVersionAttr (..),
+    PolicyReferenceAttr (..),
 
     -- * Attribute Parsing and Encoding
     parseTCGAttribute,
@@ -95,6 +106,16 @@ data TCGAttribute
   | TCGRelevantManifests RelevantManifestsAttr
   | TCGVirtualPlatform VirtualPlatformAttr
   | TCGMultiTenant MultiTenantAttr
+  -- | Extended platform attributes (IWG v1.1)
+  | TCGPlatformConfigUri PlatformConfigUriAttr
+  | TCGPlatformClass PlatformClassAttr
+  | TCGCertificationLevel CertificationLevelAttr
+  | TCGPlatformQualifiers PlatformQualifiersAttr
+  | TCGRootOfTrust RootOfTrustAttr
+  | TCGRTMType RTMTypeAttr
+  | TCGBootMode BootModeAttr
+  | TCGFirmwareVersion FirmwareVersionAttr
+  | TCGPolicyReference PolicyReferenceAttr
   | -- | For unknown/custom attributes
     TCGOtherAttribute OID B.ByteString
   deriving (Show, Eq)
@@ -290,6 +311,16 @@ encodeTCGAttribute tcgAttr =
     TCGRelevantManifests attr -> encodeAttribute tcg_ce_relevantManifests [encodeRelevantManiAttr attr]
     TCGVirtualPlatform attr -> encodeAttribute tcg_ce_virtualPlatform [encodeVirtualPlatAttr attr]
     TCGMultiTenant attr -> encodeAttribute tcg_ce_multiTenant [encodeMultiTenantAttr attr]
+    -- Extended platform attributes
+    TCGPlatformConfigUri attr -> encodeAttribute tcg_at_platformConfigUri [encodePlatformConfigUriAttr attr]
+    TCGPlatformClass attr -> encodeAttribute tcg_at_platformClass [encodePlatformClassAttr attr]
+    TCGCertificationLevel attr -> encodeAttribute tcg_at_certificationLevel [encodeCertificationLevelAttr attr]
+    TCGPlatformQualifiers attr -> encodeAttribute tcg_at_platformQualifiers [encodePlatformQualifiersAttr attr]
+    TCGRootOfTrust attr -> encodeAttribute tcg_at_rootOfTrust [encodeRootOfTrustAttr attr]
+    TCGRTMType attr -> encodeAttribute tcg_at_rtmType [encodeRTMTypeAttr attr]
+    TCGBootMode attr -> encodeAttribute tcg_at_bootMode [encodeBootModeAttr attr]
+    TCGFirmwareVersion attr -> encodeAttribute tcg_at_firmwareVersion [encodeFirmwareVersionAttr attr]
+    TCGPolicyReference attr -> encodeAttribute tcg_at_policyReference [encodePolicyReferenceAttr attr]
     TCGOtherAttribute oid value -> encodeAttribute oid [[OctetString value]]
 
 -- | Lookup a TCG attribute by OID in a list of attributes
@@ -726,6 +757,16 @@ checkRequiredAttributes attrs =
       TCGRelevantManifests _ -> tcg_ce_relevantManifests
       TCGVirtualPlatform _ -> tcg_ce_virtualPlatform
       TCGMultiTenant _ -> tcg_ce_multiTenant
+      -- Extended platform attributes
+      TCGPlatformConfigUri _ -> tcg_at_platformConfigUri
+      TCGPlatformClass _ -> tcg_at_platformClass
+      TCGCertificationLevel _ -> tcg_at_certificationLevel
+      TCGPlatformQualifiers _ -> tcg_at_platformQualifiers
+      TCGRootOfTrust _ -> tcg_at_rootOfTrust
+      TCGRTMType _ -> tcg_at_rtmType
+      TCGBootMode _ -> tcg_at_bootMode
+      TCGFirmwareVersion _ -> tcg_at_firmwareVersion
+      TCGPolicyReference _ -> tcg_at_policyReference
       TCGOtherAttribute oid _ -> oid
 
 validateSingleAttribute :: TCGAttribute -> [String]
@@ -752,5 +793,263 @@ validateSingleAttribute attr =
     TCGVirtualPlatform _ -> [] -- Virtual platform attributes are always valid
     TCGMultiTenant _ -> [] -- Multi-tenant attributes are always valid
     TCGComponentClass _ -> [] -- Component class attributes are always valid
+    -- Extended platform attributes validation
+    TCGPlatformConfigUri (PlatformConfigUriAttr uri _) ->
+      (["Platform Configuration URI cannot be empty" | B.null uri])
+    TCGPlatformClass (PlatformClassAttr cls _) ->
+      (["Platform Class cannot be empty" | B.null cls])
+    TCGCertificationLevel (CertificationLevelAttr lvl _) ->
+      (["Certification Level must be between 1-7" | lvl < 1 || lvl > 7])
+    TCGPlatformQualifiers (PlatformQualifiersAttr quals _) ->
+      (["Platform Qualifiers list cannot be empty" | null quals])
+    TCGRootOfTrust (RootOfTrustAttr measure _ _) ->
+      (["Root of Trust measurement cannot be empty" | B.null measure])
+    TCGRTMType (RTMTypeAttr typ _) ->
+      (["RTM Type must be 1 (BIOS), 2 (UEFI), or 3 (Other)" | typ < 1 || typ > 3])
+    TCGBootMode (BootModeAttr mode _) ->
+      (["Boot Mode cannot be empty" | B.null mode])
+    TCGFirmwareVersion (FirmwareVersionAttr ver _) ->
+      (["Firmware Version cannot be empty" | B.null ver])
+    TCGPolicyReference (PolicyReferenceAttr uri _) ->
+      (["Policy Reference URI cannot be empty" | B.null uri])
     TCGOtherAttribute _ bs ->
       (["Custom attribute value cannot be empty" | B.null bs])
+
+-- * Extended Platform Attributes (IWG v1.1)
+
+-- | Platform Configuration URI attribute
+data PlatformConfigUriAttr = PlatformConfigUriAttr
+  { pcuUri :: B.ByteString,
+    pcuDescription :: Maybe B.ByteString
+  }
+  deriving (Show, Eq)
+
+-- | Platform Class attribute
+data PlatformClassAttr = PlatformClassAttr
+  { pcaClass :: B.ByteString,
+    pcaDescription :: Maybe B.ByteString
+  }
+  deriving (Show, Eq)
+
+-- | Certification Level attribute (1-7)
+data CertificationLevelAttr = CertificationLevelAttr
+  { claLevel :: Int,
+    claDescription :: Maybe B.ByteString
+  }
+  deriving (Show, Eq)
+
+-- | Platform Qualifiers attribute
+data PlatformQualifiersAttr = PlatformQualifiersAttr
+  { pqaQualifiers :: [B.ByteString],
+    pqaDescription :: Maybe B.ByteString
+  }
+  deriving (Show, Eq)
+
+-- | Root of Trust attribute
+data RootOfTrustAttr = RootOfTrustAttr
+  { rotMeasurement :: B.ByteString,
+    rotAlgorithm :: OID,
+    rotDescription :: Maybe B.ByteString
+  }
+  deriving (Show, Eq)
+
+-- | RTM Type attribute (1=BIOS, 2=UEFI, 3=Other)
+data RTMTypeAttr = RTMTypeAttr
+  { rtmType :: Int,
+    rtmDescription :: Maybe B.ByteString
+  }
+  deriving (Show, Eq)
+
+-- | Boot Mode attribute
+data BootModeAttr = BootModeAttr
+  { bmMode :: B.ByteString,
+    bmDescription :: Maybe B.ByteString
+  }
+  deriving (Show, Eq)
+
+-- | Firmware Version attribute
+data FirmwareVersionAttr = FirmwareVersionAttr
+  { fvVersion :: B.ByteString,
+    fvDescription :: Maybe B.ByteString
+  }
+  deriving (Show, Eq)
+
+-- | Policy Reference attribute
+data PolicyReferenceAttr = PolicyReferenceAttr
+  { prUri :: B.ByteString,
+    prDescription :: Maybe B.ByteString
+  }
+  deriving (Show, Eq)
+
+-- * ASN.1 Encoding/Decoding Instances for Extended Attributes
+
+instance ASN1Object PlatformConfigUriAttr where
+  toASN1 (PlatformConfigUriAttr uri desc) xs =
+    [Start Sequence, OctetString uri]
+    ++ maybe [] (\d -> [OctetString d]) desc
+    ++ [End Sequence]
+    ++ xs
+  fromASN1 (Start Sequence : OctetString uri : rest) = do
+    case rest of
+      (End Sequence : xs) -> Right (PlatformConfigUriAttr uri Nothing, xs)
+      (OctetString desc : End Sequence : xs) -> Right (PlatformConfigUriAttr uri (Just desc), xs)
+      _ -> Left "PlatformConfigUriAttr: Invalid ASN1 structure"
+  fromASN1 _ = Left "PlatformConfigUriAttr: Expected Start Sequence"
+
+instance ASN1Object PlatformClassAttr where
+  toASN1 (PlatformClassAttr cls desc) xs =
+    [Start Sequence, OctetString cls]
+    ++ maybe [] (\d -> [OctetString d]) desc
+    ++ [End Sequence]
+    ++ xs
+  fromASN1 (Start Sequence : OctetString cls : rest) = do
+    case rest of
+      (End Sequence : xs) -> Right (PlatformClassAttr cls Nothing, xs)
+      (OctetString desc : End Sequence : xs) -> Right (PlatformClassAttr cls (Just desc), xs)
+      _ -> Left "PlatformClassAttr: Invalid ASN1 structure"
+  fromASN1 _ = Left "PlatformClassAttr: Expected Start Sequence"
+
+instance ASN1Object CertificationLevelAttr where
+  toASN1 (CertificationLevelAttr lvl desc) xs =
+    [Start Sequence, IntVal (fromIntegral lvl)]
+    ++ maybe [] (\d -> [OctetString d]) desc
+    ++ [End Sequence]
+    ++ xs
+  fromASN1 (Start Sequence : IntVal lvl : rest) = do
+    case rest of
+      (End Sequence : xs) -> Right (CertificationLevelAttr (fromIntegral lvl) Nothing, xs)
+      (OctetString desc : End Sequence : xs) -> Right (CertificationLevelAttr (fromIntegral lvl) (Just desc), xs)
+      _ -> Left "CertificationLevelAttr: Invalid ASN1 structure"
+  fromASN1 _ = Left "CertificationLevelAttr: Expected Start Sequence"
+
+instance ASN1Object PlatformQualifiersAttr where
+  toASN1 (PlatformQualifiersAttr quals desc) xs =
+    [Start Sequence]
+    ++ [Start Sequence] ++ concatMap (\q -> [OctetString q]) quals ++ [End Sequence]
+    ++ maybe [] (\d -> [OctetString d]) desc
+    ++ [End Sequence]
+    ++ xs
+  fromASN1 (Start Sequence : Start Sequence : rest) = do
+    let (qualifiers, remaining) = parseQualifiers rest
+    case remaining of
+      (End Sequence : End Sequence : xs) -> Right (PlatformQualifiersAttr qualifiers Nothing, xs)
+      (End Sequence : OctetString desc : End Sequence : xs) -> Right (PlatformQualifiersAttr qualifiers (Just desc), xs)
+      _ -> Left "PlatformQualifiersAttr: Invalid ASN1 structure"
+    where
+      parseQualifiers (OctetString q : rest') = 
+        let (quals, remaining) = parseQualifiers rest'
+        in (q : quals, remaining)
+      parseQualifiers rest' = ([], rest')
+  fromASN1 _ = Left "PlatformQualifiersAttr: Expected Start Sequence"
+
+instance ASN1Object RootOfTrustAttr where
+  toASN1 (RootOfTrustAttr measure alg desc) xs =
+    [Start Sequence, OctetString measure, OID alg]
+    ++ maybe [] (\d -> [OctetString d]) desc
+    ++ [End Sequence]
+    ++ xs
+  fromASN1 (Start Sequence : OctetString measure : OID alg : rest) = do
+    case rest of
+      (End Sequence : xs) -> Right (RootOfTrustAttr measure alg Nothing, xs)
+      (OctetString desc : End Sequence : xs) -> Right (RootOfTrustAttr measure alg (Just desc), xs)
+      _ -> Left "RootOfTrustAttr: Invalid ASN1 structure"
+  fromASN1 _ = Left "RootOfTrustAttr: Expected Start Sequence"
+
+instance ASN1Object RTMTypeAttr where
+  toASN1 (RTMTypeAttr typ desc) xs =
+    [Start Sequence, IntVal (fromIntegral typ)]
+    ++ maybe [] (\d -> [OctetString d]) desc
+    ++ [End Sequence]
+    ++ xs
+  fromASN1 (Start Sequence : IntVal typ : rest) = do
+    case rest of
+      (End Sequence : xs) -> Right (RTMTypeAttr (fromIntegral typ) Nothing, xs)
+      (OctetString desc : End Sequence : xs) -> Right (RTMTypeAttr (fromIntegral typ) (Just desc), xs)
+      _ -> Left "RTMTypeAttr: Invalid ASN1 structure"
+  fromASN1 _ = Left "RTMTypeAttr: Expected Start Sequence"
+
+instance ASN1Object BootModeAttr where
+  toASN1 (BootModeAttr mode desc) xs =
+    [Start Sequence, OctetString mode]
+    ++ maybe [] (\d -> [OctetString d]) desc
+    ++ [End Sequence]
+    ++ xs
+  fromASN1 (Start Sequence : OctetString mode : rest) = do
+    case rest of
+      (End Sequence : xs) -> Right (BootModeAttr mode Nothing, xs)
+      (OctetString desc : End Sequence : xs) -> Right (BootModeAttr mode (Just desc), xs)
+      _ -> Left "BootModeAttr: Invalid ASN1 structure"
+  fromASN1 _ = Left "BootModeAttr: Expected Start Sequence"
+
+instance ASN1Object FirmwareVersionAttr where
+  toASN1 (FirmwareVersionAttr ver desc) xs =
+    [Start Sequence, OctetString ver]
+    ++ maybe [] (\d -> [OctetString d]) desc
+    ++ [End Sequence]
+    ++ xs
+  fromASN1 (Start Sequence : OctetString ver : rest) = do
+    case rest of
+      (End Sequence : xs) -> Right (FirmwareVersionAttr ver Nothing, xs)
+      (OctetString desc : End Sequence : xs) -> Right (FirmwareVersionAttr ver (Just desc), xs)
+      _ -> Left "FirmwareVersionAttr: Invalid ASN1 structure"
+  fromASN1 _ = Left "FirmwareVersionAttr: Expected Start Sequence"
+
+instance ASN1Object PolicyReferenceAttr where
+  toASN1 (PolicyReferenceAttr uri desc) xs =
+    [Start Sequence, OctetString uri]
+    ++ maybe [] (\d -> [OctetString d]) desc
+    ++ [End Sequence]
+    ++ xs
+  fromASN1 (Start Sequence : OctetString uri : rest) = do
+    case rest of
+      (End Sequence : xs) -> Right (PolicyReferenceAttr uri Nothing, xs)
+      (OctetString desc : End Sequence : xs) -> Right (PolicyReferenceAttr uri (Just desc), xs)
+      _ -> Left "PolicyReferenceAttr: Invalid ASN1 structure"
+  fromASN1 _ = Left "PolicyReferenceAttr: Expected Start Sequence"
+
+-- * Extended Attribute Encoders
+
+encodePlatformConfigUriAttr :: PlatformConfigUriAttr -> [AttributeValue]
+encodePlatformConfigUriAttr attr =
+  let encoded = L.toStrict $ encodeASN1 DER (toASN1 attr [])
+  in [OctetString encoded]
+
+encodePlatformClassAttr :: PlatformClassAttr -> [AttributeValue]
+encodePlatformClassAttr attr =
+  let encoded = L.toStrict $ encodeASN1 DER (toASN1 attr [])
+  in [OctetString encoded]
+
+encodeCertificationLevelAttr :: CertificationLevelAttr -> [AttributeValue]
+encodeCertificationLevelAttr attr =
+  let encoded = L.toStrict $ encodeASN1 DER (toASN1 attr [])
+  in [OctetString encoded]
+
+encodePlatformQualifiersAttr :: PlatformQualifiersAttr -> [AttributeValue]
+encodePlatformQualifiersAttr attr =
+  let encoded = L.toStrict $ encodeASN1 DER (toASN1 attr [])
+  in [OctetString encoded]
+
+encodeRootOfTrustAttr :: RootOfTrustAttr -> [AttributeValue]
+encodeRootOfTrustAttr attr =
+  let encoded = L.toStrict $ encodeASN1 DER (toASN1 attr [])
+  in [OctetString encoded]
+
+encodeRTMTypeAttr :: RTMTypeAttr -> [AttributeValue]
+encodeRTMTypeAttr attr =
+  let encoded = L.toStrict $ encodeASN1 DER (toASN1 attr [])
+  in [OctetString encoded]
+
+encodeBootModeAttr :: BootModeAttr -> [AttributeValue]
+encodeBootModeAttr attr =
+  let encoded = L.toStrict $ encodeASN1 DER (toASN1 attr [])
+  in [OctetString encoded]
+
+encodeFirmwareVersionAttr :: FirmwareVersionAttr -> [AttributeValue]
+encodeFirmwareVersionAttr attr =
+  let encoded = L.toStrict $ encodeASN1 DER (toASN1 attr [])
+  in [OctetString encoded]
+
+encodePolicyReferenceAttr :: PolicyReferenceAttr -> [AttributeValue]
+encodePolicyReferenceAttr attr =
+  let encoded = L.toStrict $ encodeASN1 DER (toASN1 attr [])
+  in [OctetString encoded]

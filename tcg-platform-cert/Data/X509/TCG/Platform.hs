@@ -19,6 +19,7 @@ module Data.X509.TCG.Platform
 
     -- * Platform Configuration
     PlatformConfiguration (..),
+    ExtendedPlatformConfiguration (..),
     PlatformConfigurationV2 (..),
     ComponentStatus (..),
 
@@ -129,6 +130,35 @@ data PlatformConfiguration = PlatformConfiguration
     pcVersion :: B.ByteString,
     pcSerial :: B.ByteString,
     pcComponents :: [ComponentIdentifier]
+  }
+  deriving (Show, Eq)
+
+-- | Extended Platform Configuration structure  
+--
+-- Enhanced version with additional platform metadata fields as defined in
+-- IWG Platform Certificate Profile v1.1.
+data ExtendedPlatformConfiguration = ExtendedPlatformConfiguration
+  { epcManufacturer :: B.ByteString,
+    epcModel :: B.ByteString,
+    epcVersion :: B.ByteString,
+    epcSerial :: B.ByteString,
+    epcComponents :: [ComponentIdentifier],
+    -- Extended fields from IWG Platform Certificate Profile v1.1
+    epcPlatformConfigUri :: Maybe B.ByteString,      -- Platform Configuration URI
+    epcPlatformClass :: Maybe B.ByteString,          -- Platform Class identifier  
+    epcSpecificationVersion :: Maybe B.ByteString,   -- TCG specification version
+    epcMajorVersion :: Maybe Int,                    -- Major version number
+    epcMinorVersion :: Maybe Int,                    -- Minor version number  
+    epcPatchVersion :: Maybe Int,                    -- Patch version number
+    epcPlatformQualifier :: Maybe B.ByteString,      -- Platform qualifier (Enterprise, Consumer, etc.)
+    -- Additional platform fields
+    epcCertificationLevel :: Maybe Int,              -- Certification level (1-7)
+    epcPlatformQualifiers :: Maybe [B.ByteString],   -- List of platform qualifiers
+    epcRootOfTrust :: Maybe B.ByteString,            -- Root of Trust information
+    epcRTMType :: Maybe Int,                         -- RTM Type (1=BIOS, 2=UEFI, 3=Other)
+    epcBootMode :: Maybe B.ByteString,               -- Boot mode information
+    epcFirmwareVersion :: Maybe B.ByteString,        -- Firmware version
+    epcPolicyReference :: Maybe B.ByteString         -- Policy reference URI
   }
   deriving (Show, Eq)
 
@@ -481,3 +511,44 @@ instance ASN1Object ComponentStatus where
     | n >= 0 && n <= 3 = Right (toEnum (fromIntegral n), xs)
     | otherwise = Left "ComponentStatus: Invalid enum value"
   fromASN1 _ = Left "ComponentStatus: Invalid ASN1 structure"
+
+instance ASN1Object ExtendedPlatformConfiguration where
+  toASN1 (ExtendedPlatformConfiguration mfg model ver serial comps configUri platClass specVer 
+          majVer minVer patchVer platQual certLvl quals rot rtmType bootMode fwVer polRef) xs =
+    [Start Sequence]
+    ++ [OctetString mfg, OctetString model, OctetString ver, OctetString serial]
+    ++ [Start Sequence] ++ concatMap (\comp -> toASN1 comp []) comps ++ [End Sequence]
+    -- Optional extended fields
+    ++ maybe [] (\uri -> [OctetString uri]) configUri
+    ++ maybe [] (\cls -> [OctetString cls]) platClass
+    ++ maybe [] (\spec -> [OctetString spec]) specVer
+    ++ maybe [] (\maj -> [IntVal (fromIntegral maj)]) majVer
+    ++ maybe [] (\min' -> [IntVal (fromIntegral min')]) minVer
+    ++ maybe [] (\patch -> [IntVal (fromIntegral patch)]) patchVer
+    ++ maybe [] (\qual -> [OctetString qual]) platQual
+    ++ maybe [] (\lvl -> [IntVal (fromIntegral lvl)]) certLvl
+    ++ maybe [] (\qs -> [Start Sequence] ++ concatMap (\q -> [OctetString q]) qs ++ [End Sequence]) quals
+    ++ maybe [] (\r -> [OctetString r]) rot
+    ++ maybe [] (\rt -> [IntVal (fromIntegral rt)]) rtmType
+    ++ maybe [] (\bm -> [OctetString bm]) bootMode
+    ++ maybe [] (\fw -> [OctetString fw]) fwVer
+    ++ maybe [] (\pol -> [OctetString pol]) polRef
+    ++ [End Sequence]
+    ++ xs
+    
+  fromASN1 (Start Sequence : OctetString mfg : OctetString model : OctetString ver : OctetString serial : Start Sequence : rest) = do
+    (comps, rest') <- parseComponentList rest []
+    -- Parse optional fields (simplified implementation)  
+    parseExtendedFields rest' mfg model ver serial comps Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing
+    where
+      parseComponentList (End Sequence : remaining) acc = Right (reverse acc, remaining)
+      parseComponentList remaining acc = do
+        (comp, rest'') <- fromASN1 remaining
+        parseComponentList rest'' (comp : acc)
+      parseExtendedFields (End Sequence : xs) mfg' model' ver' serial' comps' configUri' platClass' specVer' majVer' minVer' patchVer' platQual' certLvl' quals' rot' rtmType' bootMode' fwVer' polRef' =
+        Right (ExtendedPlatformConfiguration mfg' model' ver' serial' comps' configUri' platClass' specVer' majVer' minVer' patchVer' platQual' certLvl' quals' rot' rtmType' bootMode' fwVer' polRef', xs)
+      parseExtendedFields (OctetString val : rest'') mfg' model' ver' serial' comps' Nothing platClass' specVer' majVer' minVer' patchVer' platQual' certLvl' quals' rot' rtmType' bootMode' fwVer' polRef' =
+        parseExtendedFields rest'' mfg' model' ver' serial' comps' (Just val) platClass' specVer' majVer' minVer' patchVer' platQual' certLvl' quals' rot' rtmType' bootMode' fwVer' polRef'
+      parseExtendedFields rest'' _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ = 
+        Left "ExtendedPlatformConfiguration: Could not parse extended fields"
+  fromASN1 _ = Left "ExtendedPlatformConfiguration: Expected Start Sequence"
