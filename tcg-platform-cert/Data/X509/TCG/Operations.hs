@@ -15,6 +15,7 @@ module Data.X509.TCG.Operations
   ( -- * Certificate Creation
     createPlatformCertificate,
     createDeltaPlatformCertificate,
+    createSignedDeltaPlatformCertificate,
     
     -- * Configuration Management  
     getCurrentPlatformConfiguration,
@@ -36,14 +37,17 @@ module Data.X509.TCG.Operations
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as B8
 import Data.ASN1.Types (ASN1(..), OID)
-import Data.X509 (DistinguishedName(..), SignatureALG(..), PubKeyALG(..), HashALG(..), objectToSignedExact, Extensions(..))
+import Data.X509 (DistinguishedName(..), SignatureALG(..), PubKeyALG(..), HashALG(..), objectToSignedExact, objectToSignedExactF, Extensions(..), AltName(..))
 import Data.X509.AttCert (Holder(..), AttCertIssuer(..), AttCertValidityPeriod)
-import Data.X509AC (V2Form(..))
+import Data.X509AC (V2Form(..), IssuerSerial(..))
 import Data.X509.Attribute (Attributes(..), Attribute(..))
 import Data.X509.TCG.Platform
 import Data.X509.TCG.Delta
 import Data.X509.TCG.Component
 import Data.X509.TCG.OID (tcg_at_platformManufacturer, tcg_at_platformModel, tcg_at_platformSerial, tcg_at_platformVersion, tcg_at_componentIdentifier_v2, tcg_at_platformConfiguration_v2)
+import qualified Crypto.PubKey.RSA as RSA
+import qualified Crypto.PubKey.RSA.PKCS15 as RSA
+import qualified Crypto.Hash as Hash
 
 -- * Certificate Creation
 
@@ -160,10 +164,67 @@ buildDeltaAttributes delta =
       allAttributes = [countAttr, changeAttr]
   in Right $ Attributes allAttributes
 
--- | Create a dummy signing function for delta certificates
+-- | Create a dummy signing function for delta certificates  
 createDummySigningFunctionForDelta :: B.ByteString -> (B.ByteString, SignatureALG, ())
 createDummySigningFunctionForDelta _dataToSign = 
   (B.replicate 32 0x43, SignatureALG HashSHA256 PubKeyALG_RSA, ())  -- 32 bytes of dummy signature data
+
+-- | Create a Delta Platform Certificate with real cryptographic signing
+--
+-- This function creates a properly signed Delta Platform Certificate using 
+-- a real private key for cryptographic signature generation.
+createSignedDeltaPlatformCertificate :: Holder                       -- ^ Certificate holder
+                                    -> AttCertIssuer                -- ^ Attribute certificate issuer  
+                                    -> AttCertValidityPeriod        -- ^ Validity period
+                                    -> BasePlatformCertificateRef   -- ^ Reference to base certificate
+                                    -> PlatformConfigurationDelta   -- ^ Configuration changes
+                                    -> (SignatureALG, RSA.PublicKey, RSA.PrivateKey) -- ^ Signing key material
+                                    -> IO (Either String SignedDeltaPlatformCertificate)
+createSignedDeltaPlatformCertificate holder issuer validity baseRef configDelta (sigAlg, _pubKey, privKey) = do
+  -- Build delta configuration attributes
+  case buildDeltaAttributes configDelta of
+    Left err -> return $ Left err
+    Right attrs -> do
+      -- Build the Delta Platform Certificate Info structure
+      let deltaCertInfo = DeltaPlatformCertificateInfo
+            { dpciVersion = 2  -- v2 certificate
+            , dpciHolder = holder
+            , dpciIssuer = issuer
+            , dpciSignature = sigAlg
+            , dpciSerialNumber = bpcrSerialNumber baseRef + 1  -- Increment from base
+            , dpciValidity = validity
+            , dpciAttributes = attrs
+            , dpciIssuerUniqueID = Nothing
+            , dpciExtensions = Extensions Nothing
+            , dpciBaseCertificateRef = baseRef
+            }
+      
+      -- Create real signing function using RSA private key
+      let realSigningFunction objRaw = do
+            let hashAlg = case sigAlg of
+                  SignatureALG hashType _ -> hashType
+                  _ -> HashSHA256  -- Default fallback
+            sigBits <- doSignRSA hashAlg privKey objRaw
+            return (sigBits, sigAlg)
+      
+      -- Create signed certificate with real signature
+      signedCert <- objectToSignedExactF realSigningFunction deltaCertInfo
+      
+      return $ Right signedCert
+
+-- | RSA signing helper for Delta certificates
+doSignRSA :: HashALG -> RSA.PrivateKey -> B.ByteString -> IO B.ByteString
+doSignRSA hashAlg privKey msg = do
+  result <- case hashAlg of
+    HashSHA1   -> RSA.signSafer (Just Hash.SHA1) privKey msg
+    HashSHA256 -> RSA.signSafer (Just Hash.SHA256) privKey msg  
+    HashSHA384 -> RSA.signSafer (Just Hash.SHA384) privKey msg
+    HashSHA512 -> RSA.signSafer (Just Hash.SHA512) privKey msg
+    _ -> RSA.signSafer (Just Hash.SHA256) privKey msg  -- Default fallback
+  
+  case result of
+    Left err -> error ("doSignRSA: " ++ show err)
+    Right signature -> return signature
 
 -- * Configuration Management
 
@@ -417,17 +478,31 @@ findBaseCertificate deltaCert candidates =
 -- For now, we return an empty DistinguishedName as a placeholder.
 -- This is acceptable for certificate chain building where the DN is primarily used for identification.
 extractIssuerDN :: AttCertIssuer -> DistinguishedName  
-extractIssuerDN (AttCertIssuerV1 _generalNames) = 
-  -- V1 form with GeneralNames - would need AltName pattern matching
-  DistinguishedName []
+extractIssuerDN (AttCertIssuerV1 generalNames) = 
+  -- V1 form with GeneralNames - extract DirectoryName if present
+  case extractDirectoryNameFromGeneralNames generalNames of
+    Just dn -> dn
+    Nothing -> DistinguishedName []  -- Fallback if no DirectoryName found
 extractIssuerDN (AttCertIssuerV2 v2form) = 
   case v2fromBaseCertificateID v2form of
-    Just _issuerSerial -> 
-      -- baseCertificateID present - would need certificate resolution
-      DistinguishedName []
+    Just issuerSerial -> 
+      -- When baseCertificateID is present, extract issuer from the IssuerSerial
+      -- The IssuerSerial contains GeneralNames for the issuer
+      case extractDirectoryNameFromGeneralNames (issuer issuerSerial) of
+        Just dn -> dn
+        Nothing -> DistinguishedName []
     Nothing -> 
-      -- GeneralNames in issuerName - would need AltName pattern matching
-      DistinguishedName []
+      -- No baseCertificateID, issuer name should be in issuerName (GeneralNames)
+      -- Extract DirectoryName from the GeneralNames in issuerName
+      case extractDirectoryNameFromGeneralNames (v2fromIssuerName v2form) of
+        Just dn -> dn
+        Nothing -> DistinguishedName []
+
+-- | Extract DirectoryName from GeneralNames
+extractDirectoryNameFromGeneralNames :: [AltName] -> Maybe DistinguishedName
+extractDirectoryNameFromGeneralNames [] = Nothing
+extractDirectoryNameFromGeneralNames (AltDirectoryName dn : _) = Just dn
+extractDirectoryNameFromGeneralNames (_ : rest) = extractDirectoryNameFromGeneralNames rest
 
 -- | Extract base certificate reference from delta certificate
 extractBaseCertificateReference :: SignedDeltaPlatformCertificate -> BasePlatformCertificateRef
