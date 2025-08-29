@@ -579,5 +579,51 @@ tests = testGroup "Operations Tests"
             -- Check that attributes are present (should contain delta info)
             case attrs of
               Attributes attrList -> length attrList > 0 @?= True
+    
+    , testCase "createSignedDeltaPlatformCertificate creates properly signed Delta Certificate" $ do
+        -- Create RSA key material for signing
+        let alg = TCG.AlgRSA 2048 TCG.hashSHA256
+        (_, pubKey, privKey) <- TCG.generateKeys alg
+        let sigAlg = SignatureALG HashSHA256 PubKeyALG_RSA
+        
+        -- Create test holder
+        let holder = HolderEntityName []
+            issuer = AttCertIssuerV1 []
+        
+        -- Create test validity period
+        let validityStart = DateTime (Date 2024 March 1) (TimeOfDay 10 0 0 0)
+            validityEnd = DateTime (Date 2025 March 1) (TimeOfDay 10 0 0 0)  
+            validity = AttCertValidityPeriod validityStart validityEnd
+        
+        -- Create base certificate reference
+        let baseRef = BasePlatformCertificateRef 
+                      (DistinguishedName []) 
+                      12345  -- base serial number
+                      Nothing 
+                      Nothing
+        
+        -- Create configuration delta
+        let configDelta = PlatformConfigurationDelta
+              { pcdPlatformInfoChanges = Nothing
+              , pcdComponentDeltas = []
+              , pcdChangeRecords = []
+              }
+        
+        -- Call createSignedDeltaPlatformCertificate
+        result <- createSignedDeltaPlatformCertificate holder issuer validity baseRef configDelta (sigAlg, pubKey, privKey)
+        
+        -- Verify successful creation
+        case result of
+          Left err -> assertFailure $ "Expected success but got error: " ++ err
+          Right signedDelta -> do
+            let deltaInfo = getDeltaPlatformCertificate signedDelta
+            -- Verify that delta certificate contains expected information
+            dpciVersion deltaInfo @?= 2
+            dpciHolder deltaInfo @?= holder
+            dpciIssuer deltaInfo @?= issuer
+            dpciSerialNumber deltaInfo @?= 12346  -- base + 1
+            dpciBaseCertificateRef deltaInfo @?= baseRef
+            -- Verify signature algorithm is what we specified
+            dpciSignature deltaInfo @?= sigAlg
     ]
   ]
