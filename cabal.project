@@ -1,0 +1,21 @@
+packages:
+  tcg-platform-cert
+  tcg-platform-cert-validation
+  tcg-platform-cert-util
+
+-- Additional package repositories
+-- repository hackage.haskell.org
+--   url: https://hackage.haskell.org/
+
+-- Allow newer versions for compatibility
+allow-newer:
+  *:base,
+  *:bytestring,
+  *:crypton,
+  *:crypton-x509,
+  *:time
+
+-- Constraints to resolve version conflicts
+constraints:
+  base >= 4.16,
+  bytestring >= 0.10
