@@ -7,6 +7,8 @@ packages:
 - x509-validation
 - x509-util
 - tcg-platform-cert
+- tcg-platform-cert-validation
+- tcg-platform-cert-util
 
 nix:
   pure: false
