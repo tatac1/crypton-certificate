@@ -47,6 +47,17 @@ module Data.X509.TCG.OID
     tcg_ce_virtualPlatform,
     tcg_ce_multiTenant,
     
+    -- * Extended Platform Attribute OIDs (IWG v1.1)
+    tcg_at_platformConfigUri,
+    tcg_at_platformClass,
+    tcg_at_certificationLevel,
+    tcg_at_platformQualifiers,
+    tcg_at_rootOfTrust,
+    tcg_at_rtmType,
+    tcg_at_bootMode,
+    tcg_at_firmwareVersion,
+    tcg_at_policyReference,
+    
     -- * Component Classes
     tcg_class_motherboard,
     tcg_class_cpu,
@@ -331,3 +342,50 @@ tcg_class_scsi = tcgOID ++ [18, 3, 3]
 -- OID: 2.23.133.18.3.4
 tcg_class_ide :: OID
 tcg_class_ide = tcgOID ++ [18, 3, 4]
+
+-- * Extended Platform Attribute OID Definitions (IWG v1.1)
+
+-- | Platform Configuration URI attribute
+-- OID: 2.23.133.2.20
+tcg_at_platformConfigUri :: OID
+tcg_at_platformConfigUri = tcgOID ++ [2, 20]
+
+-- | Platform Class attribute  
+-- OID: 2.23.133.2.21
+tcg_at_platformClass :: OID
+tcg_at_platformClass = tcgOID ++ [2, 21]
+
+-- | Certification Level attribute
+-- OID: 2.23.133.2.22  
+tcg_at_certificationLevel :: OID
+tcg_at_certificationLevel = tcgOID ++ [2, 22]
+
+-- | Platform Qualifiers attribute
+-- OID: 2.23.133.2.23
+tcg_at_platformQualifiers :: OID
+tcg_at_platformQualifiers = tcgOID ++ [2, 23]
+
+-- | Root of Trust attribute
+-- OID: 2.23.133.2.24
+tcg_at_rootOfTrust :: OID
+tcg_at_rootOfTrust = tcgOID ++ [2, 24]
+
+-- | RTM Type attribute
+-- OID: 2.23.133.2.25
+tcg_at_rtmType :: OID
+tcg_at_rtmType = tcgOID ++ [2, 25]
+
+-- | Boot Mode attribute
+-- OID: 2.23.133.2.26
+tcg_at_bootMode :: OID
+tcg_at_bootMode = tcgOID ++ [2, 26]
+
+-- | Firmware Version attribute
+-- OID: 2.23.133.2.27
+tcg_at_firmwareVersion :: OID
+tcg_at_firmwareVersion = tcgOID ++ [2, 27]
+
+-- | Policy Reference attribute
+-- OID: 2.23.133.2.28
+tcg_at_policyReference :: OID
+tcg_at_policyReference = tcgOID ++ [2, 28]

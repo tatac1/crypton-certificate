@@ -22,6 +22,8 @@ module Data.X509.TCG.Delta
 
     -- * Delta Configuration
     DeltaPlatformConfiguration (..),
+    DeltaConfiguration (..),
+    ComponentChange (..),
     PlatformConfigurationDelta (..),
     PlatformInfoDelta (..),
     ComponentDelta (..),
@@ -154,6 +156,32 @@ data DeltaPlatformConfiguration = DeltaPlatformConfiguration
     dpcConfigurationDelta :: PlatformConfigurationDelta,
     dpcChangeTimestamp :: DateTime,
     dpcChangeReason :: Maybe B.ByteString
+  }
+  deriving (Show, Eq)
+
+-- | Delta Configuration structure for YAML integration
+--
+-- Simplified delta configuration structure that can be parsed from YAML
+-- and converted to the full DeltaPlatformConfiguration.
+data DeltaConfiguration = DeltaConfiguration
+  { dcBaseCertificateSerial :: String,        -- Base certificate serial
+    dcDeltaSequenceNumber :: Maybe Int,       -- Delta sequence number
+    dcChangeDescription :: Maybe String,      -- Change description
+    dcComponentChanges :: [ComponentChange]   -- Component change list
+  }
+  deriving (Show, Eq)
+
+-- | Component Change structure for YAML integration
+--
+-- Represents a single component change in a format suitable for YAML parsing.
+data ComponentChange = ComponentChange
+  { chChangeType :: String,                   -- "added", "removed", "modified"
+    chComponentClass :: String,               -- Component class (hex string)
+    chManufacturer :: String,                 -- Component manufacturer
+    chModel :: String,                        -- Component model
+    chSerial :: String,                       -- Component serial
+    chRevision :: String,                     -- Component revision
+    chPreviousRevision :: Maybe String        -- Previous revision (for modifications)
   }
   deriving (Show, Eq)
 
