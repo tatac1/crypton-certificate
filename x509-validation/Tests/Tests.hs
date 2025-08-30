@@ -26,6 +26,9 @@ import Test.Tasty
 import Test.Tasty.HUnit
 
 import Certificate
+import qualified SBVValidation as SBV
+import qualified ComparisonTests as Comparison
+import System.Environment (getArgs)
 
 -- Runtime data, dynamically generated and shared by all test cases --
 
@@ -934,17 +937,35 @@ treeWithAlg groupName alg = withResource (initData alg) freeData $ \res ->
 
 -- | Runs the test suite.
 main :: IO ()
-main =
-    defaultMain $
-        testGroup
-            "Validation"
-            [ treeWithAlg "RSA" (AlgRSA 2048 hashSHA256)
-            , treeWithAlg "RSAPSS" (AlgRSAPSS 2048 pssParams hashSHA224)
-            , treeWithAlg "DSA" (AlgDSA dsaParams hashSHA1)
-            , treeWithAlg "ECDSA" (AlgEC curveName hashSHA512)
-            , treeWithAlg "Ed25519" AlgEd25519
-            , treeWithAlg "Ed448" AlgEd448
-            ]
+main = do
+    args <- getArgs
+    case args of
+        ["--sbv"] -> do
+            putStrLn "Running SBV validation tests..."
+            SBV.runSBVTests
+        ["--comparison"] -> do
+            putStrLn "Running X509 vs SBV comparison tests..."  
+            Comparison.runComparisonTests
+        ["--sbv-only"] -> do
+            defaultMain $
+                testGroup "SBV Validation Tests" 
+                    [SBV.sbvValidationTests, Comparison.comparisonTests]
+        _ -> do
+            defaultMain $
+                testGroup
+                    "X509 Validation (with SBV verification)"
+                    [ testGroup
+                        "Traditional Validation"
+                        [ treeWithAlg "RSA" (AlgRSA 2048 hashSHA256)
+                        , treeWithAlg "RSAPSS" (AlgRSAPSS 2048 pssParams hashSHA224)
+                        , treeWithAlg "DSA" (AlgDSA dsaParams hashSHA1)
+                        , treeWithAlg "ECDSA" (AlgEC curveName hashSHA512)
+                        , treeWithAlg "Ed25519" AlgEd25519
+                        , treeWithAlg "Ed448" AlgEd448
+                        ]
+                    , SBV.sbvValidationTests
+                    , Comparison.comparisonTests
+                    ]
   where
     pssParams = PSS.defaultPSSParams SHA224
     -- DSA parameters were generated using 'openssl dsaparam -C 2048'
