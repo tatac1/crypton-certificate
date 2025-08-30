@@ -537,18 +537,18 @@ instance ASN1Object ExtendedPlatformConfiguration where
     ++ xs
     
   fromASN1 (Start Sequence : OctetString mfg : OctetString model : OctetString ver : OctetString serial : Start Sequence : rest) = do
-    (comps, rest') <- parseComponentList rest []
+    (comps, rest') <- parseExtendedComponentList rest []
     -- Parse optional fields (simplified implementation)  
     parseExtendedFields rest' mfg model ver serial comps Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing
     where
-      parseComponentList (End Sequence : remaining) acc = Right (reverse acc, remaining)
-      parseComponentList remaining acc = do
+      parseExtendedComponentList (End Sequence : remaining) acc = Right (reverse acc, remaining)
+      parseExtendedComponentList remaining acc = do
         (comp, rest'') <- fromASN1 remaining
-        parseComponentList rest'' (comp : acc)
+        parseExtendedComponentList rest'' (comp : acc)
       parseExtendedFields (End Sequence : xs) mfg' model' ver' serial' comps' configUri' platClass' specVer' majVer' minVer' patchVer' platQual' certLvl' quals' rot' rtmType' bootMode' fwVer' polRef' =
         Right (ExtendedPlatformConfiguration mfg' model' ver' serial' comps' configUri' platClass' specVer' majVer' minVer' patchVer' platQual' certLvl' quals' rot' rtmType' bootMode' fwVer' polRef', xs)
       parseExtendedFields (OctetString val : rest'') mfg' model' ver' serial' comps' Nothing platClass' specVer' majVer' minVer' patchVer' platQual' certLvl' quals' rot' rtmType' bootMode' fwVer' polRef' =
         parseExtendedFields rest'' mfg' model' ver' serial' comps' (Just val) platClass' specVer' majVer' minVer' patchVer' platQual' certLvl' quals' rot' rtmType' bootMode' fwVer' polRef'
-      parseExtendedFields rest'' _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ = 
+      parseExtendedFields _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ = 
         Left "ExtendedPlatformConfiguration: Could not parse extended fields"
   fromASN1 _ = Left "ExtendedPlatformConfiguration: Expected Start Sequence"

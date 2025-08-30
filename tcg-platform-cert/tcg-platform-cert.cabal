@@ -81,6 +81,7 @@ test-suite test-tcg-platform-cert
     , Tests.Validation
     , Tests.Properties
     , Tests.Arbitrary
+    , Tests.SBV
 
   build-depends:
       tcg-platform-cert
@@ -95,3 +96,4 @@ test-suite test-tcg-platform-cert
     , tasty-hunit
     , QuickCheck
     , hourglass
+    , sbv >= 8.0

@@ -11,6 +11,7 @@ import qualified Tests.Operations as Operations
 import qualified Tests.Validation as Validation
 import qualified Tests.Utils as Utils
 import qualified Tests.Properties as Properties
+import qualified Tests.SBV as SBV
 
 main :: IO ()
 main = defaultMain tests
@@ -26,4 +27,5 @@ tests = testGroup "TCG Platform Certificate Tests"
   , Validation.tests
   , Utils.tests
   , Properties.tests
+  , SBV.tests
   ]
