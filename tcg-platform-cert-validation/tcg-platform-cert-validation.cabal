@@ -74,6 +74,7 @@ test-suite test-tcg-platform-cert-validation
     , Tests.Internal
     , Tests.Properties
     , Tests.Arbitrary
+    , Tests.SBV
 
   build-depends:
       tcg-platform-cert-validation
@@ -92,3 +93,4 @@ test-suite test-tcg-platform-cert-validation
     , quickcheck-instances
     , hourglass
     , time
+    , sbv >= 8.0

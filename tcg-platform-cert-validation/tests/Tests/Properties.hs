@@ -8,7 +8,7 @@ module Tests.Properties (tests) where
 
 import Test.Tasty
 import Test.Tasty.QuickCheck
-import Test.QuickCheck
+-- import Test.QuickCheck
 import Test.QuickCheck.Monadic
 
 import qualified Data.ByteString as B
@@ -63,12 +63,12 @@ cacheProperties = testGroup "Cache Properties"
       (result :: TCGValidationCacheResult) == result
       
   , testProperty "Exception cache creation never fails" $ \exceptions ->
-      let cache = exceptionTCGValidationCache (exceptions :: [(TCGServiceID, TCGFingerprint)])
+      let _cache = exceptionTCGValidationCache (exceptions :: [(TCGServiceID, TCGFingerprint)])
       in True -- Cache creation should always succeed
       
   , testProperty "TOFU cache creation never fails" $ \exceptions ->
       monadicIO $ do
-        cache <- run $ tofuTCGValidationCache (exceptions :: [(TCGServiceID, TCGFingerprint)])
+        _cache <- run $ tofuTCGValidationCache (exceptions :: [(TCGServiceID, TCGFingerprint)])
         return True -- Cache creation should always succeed
   ]
 

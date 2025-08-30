@@ -14,6 +14,7 @@ import qualified Tests.Validation
 import qualified Tests.Cache  
 import qualified Tests.Properties
 import qualified Tests.Internal
+import qualified Tests.SBV
 import Tests.Arbitrary ()
 
 main :: IO ()
@@ -26,6 +27,7 @@ tests = testGroup "TCG Platform Certificate Validation Tests"
   , cacheTests
   , internalTests
   , propertyTests
+  , sbvTests
   ]
 
 -- | Basic unit tests for core functionality
@@ -52,3 +54,6 @@ internalTests = Tests.Internal.tests
 
 propertyTests :: TestTree
 propertyTests = Tests.Properties.tests
+
+sbvTests :: TestTree
+sbvTests = Tests.SBV.tests
