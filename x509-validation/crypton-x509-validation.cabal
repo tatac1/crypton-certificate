@@ -29,7 +29,9 @@ Library
                    , crypton-x509-store >= 1.6
                    , crypton >= 0.24
                    , iproute >= 1.2.2
+                   , sbv >= 8.0
   Exposed-modules:   Data.X509.Validation
+                     Data.X509.Validation.SBV
   Other-modules:     Data.X509.Validation.Signature
                      Data.X509.Validation.Fingerprint
                      Data.X509.Validation.Cache
@@ -42,12 +44,17 @@ Test-Suite test-x509-validation
   hs-source-dirs:    Tests
   Main-is:           Tests.hs
   Other-modules:     Certificate
+                     SBVValidation
+                     ComparisonTests
   Build-Depends:     base >= 3 && < 5
                    , bytestring
                    , memory
                    , data-default
                    , tasty
                    , tasty-hunit
+                   , test-framework
+                   , test-framework-hunit
+                   , HUnit
                    , hourglass
                    , asn1-types
                    , asn1-encoding
@@ -55,6 +62,7 @@ Test-Suite test-x509-validation
                    , crypton-x509-store
                    , crypton-x509-validation
                    , crypton
+                   , sbv >= 8.0
   ghc-options:       -Wall
 
 source-repository head
