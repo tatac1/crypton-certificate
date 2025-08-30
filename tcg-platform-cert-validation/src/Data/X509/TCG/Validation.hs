@@ -18,28 +18,28 @@ module Data.X509.TCG.Validation
     validatePlatformCertificate,
     validateDeltaCertificate,
     validateCertificateChain,
-    
+
     -- * High-level Validation API
     validatePlatformCertificateWithCache,
     validateDefault,
-    
+
     -- * Attribute and Component Validation
     validateRequiredAttributes,
     validateAttributeCompliance,
     validateComponentHierarchy,
     validateComponentStatus,
-    
+
     -- * Re-exported Types
     module Data.X509.TCG.Validation.Types,
     module Data.X509.TCG.Validation.Cache,
   )
 where
 
-import Data.X509.TCG hiding (validatePlatformCertificate, validateDeltaCertificate, validateCertificateChain, validateAttributeCompliance, validateComponentHierarchy)
-import Data.X509.TCG.Validation.Types
+import Data.X509.TCG hiding (validateAttributeCompliance, validateCertificateChain, validateComponentHierarchy, validateDeltaCertificate, validatePlatformCertificate)
 import Data.X509.TCG.Validation.Cache
 import qualified Data.X509.TCG.Validation.Internal as Internal
-import Data.X509AC (AttCertValidityPeriod(..), Attributes(..))
+import Data.X509.TCG.Validation.Types
+import Data.X509AC (AttCertValidityPeriod (..), Attributes (..))
 
 -- * Main Validation Functions
 
@@ -120,26 +120,24 @@ validatePlatformCertificateWithCache ::
 validatePlatformCertificateWithCache cache serviceId cert = do
   let certEither = Left cert
       fingerprint = getTCGFingerprint certEither
-  
+
   -- Query cache first
   cacheResult <- tcgCacheQuery cache serviceId fingerprint certEither
-  
+
   case cacheResult of
-    TCGValidationCachePass -> 
-      return []  -- Certificate passed cache validation
-      
+    TCGValidationCachePass ->
+      return [] -- Certificate passed cache validation
     TCGValidationCacheDenied reason ->
-      return [CacheError reason]  -- Cache explicitly denied
-      
+      return [CacheError reason] -- Cache explicitly denied
     TCGValidationCacheUnknown -> do
       -- Perform full validation
       let validationErrors = validatePlatformCertificate cert
-      
+
       -- Add to cache if validation passed
       if null validationErrors
         then tcgCacheAdd cache serviceId fingerprint certEither
         else return ()
-      
+
       return validationErrors
 
 -- | Validate using default settings (no caching)

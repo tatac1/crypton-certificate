@@ -13,7 +13,6 @@ import Test.Tasty.QuickCheck
 import Test.QuickCheck.Instances ()
 
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as B
 
 import Data.X509.TCG.Validation.Cache
 import Data.X509.TCG.Validation.Types
@@ -78,7 +77,7 @@ cacheResultTests = testGroup "TCGValidationCacheResult Tests"
 exceptionCacheTests :: TestTree
 exceptionCacheTests = testGroup "Exception Cache Tests"
   [ testCase "Empty exception cache creation" $ do
-      let cache = exceptionTCGValidationCache []
+      let _cache = exceptionTCGValidationCache []
       -- Test successful creation
       return ()
       
@@ -86,13 +85,13 @@ exceptionCacheTests = testGroup "Exception Cache Tests"
       let serviceId = ("test-platform", "test-service")
       let fingerprint = TCGFingerprint "test_fp"
       let exceptions = [(serviceId, fingerprint)]
-      let cache = exceptionTCGValidationCache exceptions
+      let _cache = exceptionTCGValidationCache exceptions
       -- Test successful creation  
       return ()
       
   , testProperty "Exception cache is deterministic" $ \(serviceIds :: [TCGServiceID]) (fingerprints :: [TCGFingerprint]) ->
-      let exceptions = zip serviceIds fingerprints
-          cache = exceptionTCGValidationCache exceptions
+      let _exceptions = zip serviceIds fingerprints
+          _cache = exceptionTCGValidationCache _exceptions
       in True -- Cache creation should always succeed
   ]
 
@@ -100,7 +99,7 @@ exceptionCacheTests = testGroup "Exception Cache Tests"
 tofuCacheTests :: TestTree
 tofuCacheTests = testGroup "TOFU Cache Tests" 
   [ testCase "Empty TOFU cache creation" $ do
-      cache <- tofuTCGValidationCache []
+      _cache <- tofuTCGValidationCache []
       -- Test successful creation
       return ()
       
@@ -108,7 +107,7 @@ tofuCacheTests = testGroup "TOFU Cache Tests"
       let serviceId = ("test-platform", "test-service")
       let fingerprint = TCGFingerprint "test_fp"  
       let exceptions = [(serviceId, fingerprint)]
-      cache <- tofuTCGValidationCache exceptions
+      _cache <- tofuTCGValidationCache exceptions
       -- Test successful creation
       return ()
   ]
@@ -117,22 +116,22 @@ tofuCacheTests = testGroup "TOFU Cache Tests"
 cacheCallbackTests :: TestTree
 cacheCallbackTests = testGroup "Cache Callback Tests"
   [ testCase "Default cache has no-op callbacks" $ do
-      let cache = defaultTCGValidationCache
+      let _cache = defaultTCGValidationCache
       -- Test that default cache is the same as empty exception cache
       return ()
       
   , testCase "Exception cache query with empty list" $ do
-      let cache = exceptionTCGValidationCache []
-      let serviceId = ("test-platform", "test-service")
-      let fingerprint = TCGFingerprint "test_fp"
+      let _cache = exceptionTCGValidationCache []
+      let _serviceId = ("test-platform" :: String, "test-service" :: String)
+      let _fingerprint = TCGFingerprint "test_fp"
       -- For this test, we would need a mock certificate
       -- This is a placeholder for the actual test structure
       return ()
       
   , testCase "Exception cache add is no-op" $ do
-      let cache = exceptionTCGValidationCache []
-      let serviceId = ("test-platform", "test-service") 
-      let fingerprint = TCGFingerprint "test_fp"
+      let _cache = exceptionTCGValidationCache []
+      let _serviceId = ("test-platform" :: String, "test-service" :: String) 
+      let _fingerprint = TCGFingerprint "test_fp"
       -- Test that add callback does nothing for exception cache
       return ()
   ]
@@ -140,9 +139,9 @@ cacheCallbackTests = testGroup "Cache Callback Tests"
 -- Helper functions for testing
 
 -- | Generate a test TCGServiceID
-testServiceId :: String -> ByteString -> TCGServiceID
-testServiceId platform service = (platform, service)
+-- testServiceId :: String -> ByteString -> TCGServiceID
+-- testServiceId platform service = (platform, service)
 
 -- | Generate a test TCGFingerprint  
-testFingerprint :: ByteString -> TCGFingerprint
-testFingerprint = TCGFingerprint
+-- testFingerprint :: ByteString -> TCGFingerprint
+-- testFingerprint = TCGFingerprint
