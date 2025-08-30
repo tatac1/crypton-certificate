@@ -9,23 +9,23 @@
 --
 -- ASN.1 utilities for TCG Platform Certificate analysis and display.
 -- This module provides functions for parsing, analyzing, and pretty-printing ASN.1 structures.
-
 module Data.X509.TCG.Util.ASN1
   ( -- * ASN.1 Display
-    showASN1
-  , analyzeBasicCertificateInfo
-  , validateBasicASN1Structure
-  , validateASN1Elements
-  
-  -- * ASN.1 Analysis
-  , extractComponentsFromASN1
-  , findPlatformAttributes
-  , findOctetStringsInASN1
-  
-  -- * Utility Functions
-  , hexdump
-  , isAsciiPrintable
-  ) where
+    showASN1,
+    analyzeBasicCertificateInfo,
+    validateBasicASN1Structure,
+    validateASN1Elements,
+
+    -- * ASN.1 Analysis
+    extractComponentsFromASN1,
+    findPlatformAttributes,
+    findOctetStringsInASN1,
+
+    -- * Utility Functions
+    hexdump,
+    isAsciiPrintable,
+  )
+where
 
 import Control.Monad (when)
 import Data.ASN1.BitArray
@@ -132,7 +132,7 @@ validateBasicASN1Structure asn1 verbose = do
 
   -- Check if ASN.1 structure is valid
   putStrLn "1. ASN.1 Structure Check:"
-  putStrLn "   ✅ PASSED: ASN.1 parsing successful"
+  putStrLn "   PASSED: ASN.1 parsing successful"
 
   -- Look for basic certificate elements
   putStrLn ""
@@ -158,9 +158,9 @@ validateASN1Elements asn1 = do
       hasVersion = any isVersion asn1
       hasOctetStrings = not $ null $ findOctetStringsInASN1 asn1
 
-  putStrLn $ "   Sequence structure: " ++ if hasSequence then "✅ PASSED" else "❌ FAILED"
-  putStrLn $ "   Version field: " ++ if hasVersion then "✅ PASSED" else "❌ FAILED"
-  putStrLn $ "   Attribute data: " ++ if hasOctetStrings then "✅ PASSED" else "❌ FAILED"
+  putStrLn $ "   Sequence structure: " ++ if hasSequence then " PASSED" else " FAILED"
+  putStrLn $ "   Version field: " ++ if hasVersion then " PASSED" else " FAILED"
+  putStrLn $ "   Attribute data: " ++ if hasOctetStrings then " PASSED" else " FAILED"
   where
     isSequenceStart (Start Sequence) = True
     isSequenceStart _ = False

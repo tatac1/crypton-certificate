@@ -9,7 +9,7 @@ import Test.QuickCheck.Instances ()
 
 import qualified Data.ByteString.Char8 as BC
 import Data.Yaml (encodeFile, decodeFileEither)
-import System.Directory (removeFile, doesFileExist)
+import System.Directory (doesFileExist)
 import System.IO.Temp (withSystemTempFile)
 
 import Data.X509.TCG.Util.Config
@@ -27,7 +27,7 @@ tests = testGroup "Config Tests"
 configLoadingTests :: TestTree
 configLoadingTests = testGroup "Configuration Loading"
   [ testCase "Load valid platform config" $ do
-      withSystemTempFile "test-config.yaml" $ \path handle -> do
+      withSystemTempFile "test-config.yaml" $ \path _handle -> do
         let config = PlatformCertConfig
               { pccManufacturer = "Test Corp"
               , pccModel = "Test Model"
@@ -60,7 +60,7 @@ configLoadingTests = testGroup "Configuration Loading"
         Right _ -> assertFailure "Expected failure for nonexistent file"
 
   , testCase "Load delta config" $ do
-      withSystemTempFile "test-delta-config.yaml" $ \path handle -> do
+      withSystemTempFile "test-delta-config.yaml" $ \path _handle -> do
         let config = DeltaCertConfig
               { dccManufacturer = "Test Corp"
               , dccModel = "Test Model Delta"
@@ -119,7 +119,7 @@ yamlSerializationTests = testGroup "YAML Serialization"
             , pccPlatformQualifier = Just "Enterprise"
             }
       
-      withSystemTempFile "roundtrip-test.yaml" $ \path handle -> do
+      withSystemTempFile "roundtrip-test.yaml" $ \path _handle -> do
         encodeFile path originalConfig
         result <- decodeFileEither path
         case result of
@@ -127,7 +127,7 @@ yamlSerializationTests = testGroup "YAML Serialization"
           Left err -> assertFailure $ "Round-trip failed: " ++ show err
 
   , testCase "Example config creation" $ do
-      withSystemTempFile "example-test.yaml" $ \path handle -> do
+      withSystemTempFile "example-test.yaml" $ \path _handle -> do
         createExampleConfig path
         exists <- doesFileExist path
         exists @?= True

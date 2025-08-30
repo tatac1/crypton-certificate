@@ -10,28 +10,27 @@
 -- Display and formatting utilities for TCG Platform Certificates.
 -- This module provides functions for pretty-printing certificate information,
 -- components, and attributes in human-readable format.
-
 module Data.X509.TCG.Util.Display
   ( -- * Certificate Display
-    showPlatformCert
-  , showPlatformCertSmall
-  , showComponentInformation
-  , showSingleComponent
-  
-  -- * Attribute Display
-  , showTCGAttribute
-  , showExtendedPlatformAttributes
-  , isExtendedAttribute
-  
-  -- * Utility Functions
-  , certificationLevelName
-  , rtmTypeName
-  ) where
+    showPlatformCert,
+    showPlatformCertSmall,
+    showComponentInformation,
+    showSingleComponent,
+
+    -- * Attribute Display
+    showTCGAttribute,
+    showExtendedPlatformAttributes,
+    isExtendedAttribute,
+
+    -- * Utility Functions
+    certificationLevelName,
+    rtmTypeName,
+  )
+where
 
 import Control.Monad (forM_, unless, when)
-import qualified Data.ByteString as B
 import Data.Hourglass (timePrint)
-import Data.X509.AttCert (AttCertValidityPeriod(..))
+import Data.X509.AttCert (AttCertValidityPeriod (..))
 import Data.X509.Attribute (unAttributes)
 import Data.X509.TCG
 import Data.X509.TCG.Util.ASN1 (hexdump)
@@ -85,12 +84,13 @@ showPlatformCert signedCert = do
   forM_ (take 3 attrList) $ \attr ->
     putStrLn $ "  " ++ show attr
   when (length attrList > 3) $
-    putStrLn $ "  ... and " ++ show (length attrList - 3) ++ " more"
-  
+    putStrLn $
+      "  ... and " ++ show (length attrList - 3) ++ " more"
+
   putStrLn $ "TCG Specific Attributes (" ++ show (length tcgAttrs) ++ "):"
   forM_ tcgAttrs $ \attr -> do
     showTCGAttribute attr
-  
+
   -- Show extended platform attributes specifically
   showExtendedPlatformAttributes tcgAttrs
   where
