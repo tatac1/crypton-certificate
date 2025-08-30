@@ -67,7 +67,7 @@ asn1AnalysisTests = testGroup "ASN.1 Analysis Tests"
       octetStrings @?= ["test1", "test2"]
 
   , testCase "Platform attributes extraction" $ do
-      let testData = [B.pack [65, 66, 67], -- "ABC" - printable
+      let _testData = [B.pack [65, 66, 67], -- "ABC" - printable
                      B.pack [68, 69, 70], -- "DEF" - printable
                      B.pack [0, 1, 2],    -- non-printable
                      B.pack [71, 72, 73]] -- "GHI" - printable
@@ -80,13 +80,13 @@ asn1AnalysisTests = testGroup "ASN.1 Analysis Tests"
 validationTests :: TestTree
 validationTests = testGroup "Validation Tests"
   [ testCase "Basic certificate analysis with version" $ do
-      let asn1WithVersion = [IntVal 2, IntVal 12345]
+      let _asn1WithVersion = [IntVal 2, IntVal 12345]
       -- This test just ensures the function doesn't crash
       -- In practice, analyzeBasicCertificateInfo prints to stdout
       return ()
 
   , testCase "ASN.1 elements validation" $ do
-      let validAsn1 = [ Start Sequence
+      let _validAsn1 = [ Start Sequence
                       , IntVal 1
                       , OctetString "data"
                       , End Sequence
@@ -95,7 +95,7 @@ validationTests = testGroup "Validation Tests"
       return ()
 
   , testCase "Component extraction from empty ASN.1" $ do
-      let emptyAsn1 = []
+      let _emptyAsn1 = []
       -- extractComponentsFromASN1 prints results, testing it doesn't crash
       return ()
   ]

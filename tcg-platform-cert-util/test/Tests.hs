@@ -10,6 +10,9 @@ import qualified ConfigTests
 import qualified ASN1Tests  
 import qualified DisplayTests
 import qualified IntegrationTests
+import qualified CryptoAlgorithmTests
+import qualified ValidationTests
+import qualified SBVTests
 
 main :: IO ()
 main = defaultMain tests
@@ -21,6 +24,9 @@ tests = testGroup "TCG Platform Certificate Utility Tests"
   , asn1Tests
   , displayTests
   , integrationTests
+  , cryptoAlgorithmTests
+  , validationTests
+  , sbvTests
   ]
 
 -- | Basic unit tests for core functionality
@@ -46,3 +52,15 @@ displayTests = DisplayTests.tests
 -- | Integration tests
 integrationTests :: TestTree
 integrationTests = IntegrationTests.tests
+
+-- | Cryptographic algorithm tests
+cryptoAlgorithmTests :: TestTree
+cryptoAlgorithmTests = CryptoAlgorithmTests.tests
+
+-- | Validation tests
+validationTests :: TestTree
+validationTests = ValidationTests.tests
+
+-- | SBV formal verification tests
+sbvTests :: TestTree
+sbvTests = SBVTests.tests

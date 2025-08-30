@@ -11,31 +11,31 @@
 --
 -- Command line interface processing for TCG Platform Certificate utility.
 -- This module provides option parsing, command dispatch, and high-level command implementations.
-
 module Data.X509.TCG.Util.CLI
   ( -- * CLI Types
-    TCGOpts(..)
-    
-  -- * Command Implementations
-  , doGenerate
-  , doGenerateDelta
-  , doShow
-  , doValidate  
-  , doComponents
-  , createExampleConfig
-  
-  -- * Option Parsers
-  , optionsGenerate
-  , optionsGenerateDelta
-  , optionsShow
-  , optionsValidate
-  , optionsComponents
-  
-  -- * Utility Functions
-  , extractOpt
-  , getoptMain
-  , usage
-  ) where
+    TCGOpts (..),
+
+    -- * Command Implementations
+    doGenerate,
+    doGenerateDelta,
+    doShow,
+    doValidate,
+    doComponents,
+    createExampleConfig,
+
+    -- * Option Parsers
+    optionsGenerate,
+    optionsGenerateDelta,
+    optionsShow,
+    optionsValidate,
+    optionsComponents,
+
+    -- * Utility Functions
+    extractOpt,
+    getoptMain,
+    usage,
+  )
+where
 
 import Control.Monad (forM_, when)
 import Data.ASN1.BinaryEncoding
@@ -43,18 +43,17 @@ import Data.ASN1.Encoding
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
 import Data.Maybe (fromMaybe, listToMaybe, mapMaybe)
-import Data.PEM (PEM (..), pemContent, pemWriteBS, pemParseBS)
+import Data.PEM (PEM (..), pemContent, pemParseBS, pemWriteBS)
 import Data.Time.Clock (getCurrentTime)
-import Data.X509 (PrivKey (..), Certificate, decodeSignedCertificate, getCertificate)
+import Data.X509 (decodeSignedCertificate, getCertificate)
 import Data.X509.TCG
-import System.Console.GetOpt
-import System.Exit
-
 -- Local imports
 import Data.X509.TCG.Util.ASN1
 import Data.X509.TCG.Util.Certificate
 import Data.X509.TCG.Util.Config
 import Data.X509.TCG.Util.Display
+import System.Console.GetOpt
+import System.Exit
 
 -- | Command line options
 data TCGOpts
@@ -76,6 +75,8 @@ data TCGOpts
   | -- EK certificate option
     TPMEKCertificate String
   | ConfigFile String
+  | -- Hash algorithm option
+    HashAlgorithm String
   deriving (Show, Eq)
 
 -- | Generate a new platform certificate
@@ -89,41 +90,49 @@ doGenerate opts _ = do
 
   -- Check for config file option first
   let configFile = extractOpt "config" (\case ConfigFile f -> Just f; _ -> Nothing) opts ""
-  
+
   -- Load configuration from YAML file or command line options
-  (manufacturer, model, version, serial, keySize, validityDays, components) <- 
+  (manufacturer, model, version, serial, _keySize, _validityDays, components) <-
     if null configFile
-    then do
-      -- Use command line options
-      let manufacturer = extractOpt "manufacturer" (\case Manufacturer m -> Just m; _ -> Nothing) opts "Unknown"
-          model = extractOpt "model" (\case Model m -> Just m; _ -> Nothing) opts "Unknown"
-          version = extractOpt "version" (\case Version v -> Just v; _ -> Nothing) opts "1.0"
-          serial = extractOpt "serial" (\case Serial s -> Just s; _ -> Nothing) opts "0001"
-          keySize = extractOpt "key-size" (\case KeySize k -> Just (show k); _ -> Nothing) opts "2048"
-          validityDays = extractOpt "validity" (\case ValidityDays d -> Just (show d); _ -> Nothing) opts "365"
-      return (manufacturer, model, version, serial, keySize, validityDays, [])
-    else do
-      -- Load from YAML config file
-      putStrLn $ "Loading configuration from: " ++ configFile
-      result <- loadConfig configFile
-      case result of
-        Left err -> do
-          putStrLn $ "Error loading config file: " ++ err
-          exitFailure
-        Right config -> do
-          let keySize = show $ fromMaybe 2048 (pccKeySize config)
-              validityDays = show $ fromMaybe 365 (pccValidityDays config)
-          return (pccManufacturer config, pccModel config, pccVersion config, 
-                  pccSerial config, keySize, validityDays, pccComponents config)
+      then do
+        -- Use command line options
+        let manufacturer = extractOpt "manufacturer" (\case Manufacturer m -> Just m; _ -> Nothing) opts "Unknown"
+            model = extractOpt "model" (\case Model m -> Just m; _ -> Nothing) opts "Unknown"
+            version = extractOpt "version" (\case Version v -> Just v; _ -> Nothing) opts "1.0"
+            serial = extractOpt "serial" (\case Serial s -> Just s; _ -> Nothing) opts "0001"
+            keySize = extractOpt "key-size" (\case KeySize k -> Just (show k); _ -> Nothing) opts "2048"
+            validityDays = extractOpt "validity" (\case ValidityDays d -> Just (show d); _ -> Nothing) opts "365"
+        return (manufacturer, model, version, serial, keySize, validityDays, [])
+      else do
+        -- Load from YAML config file
+        putStrLn $ "Loading configuration from: " ++ configFile
+        result <- loadConfig configFile
+        case result of
+          Left err -> do
+            putStrLn $ "Error loading config file: " ++ err
+            exitFailure
+          Right config -> do
+            let keySize = show $ fromMaybe 2048 (pccKeySize config)
+                validityDays = show $ fromMaybe 365 (pccValidityDays config)
+            return
+              ( pccManufacturer config,
+                pccModel config,
+                pccVersion config,
+                pccSerial config,
+                keySize,
+                validityDays,
+                pccComponents config
+              )
 
   -- Extract remaining options
   let outputFile = extractOpt "output" (\case Output o -> Just o; _ -> Nothing) opts "platform-cert.pem"
       caKeyFile = extractOpt "ca-key" (\case CAPrivateKey k -> Just k; _ -> Nothing) opts ""
       caCertFile = extractOpt "ca-cert" (\case CACertificate c -> Just c; _ -> Nothing) opts ""
       ekCertFile = extractOpt "ek-cert" (\case TPMEKCertificate e -> Just e; _ -> Nothing) opts ""
+      hashAlg = extractOpt "hash" (\case HashAlgorithm h -> Just h; _ -> Nothing) opts "sha384"
 
   -- Create platform configuration
-  let config =
+  let _config =
         PlatformConfiguration
           { pcManufacturer = BC.pack manufacturer,
             pcModel = BC.pack model,
@@ -154,13 +163,12 @@ doGenerate opts _ = do
       certResult <- loadCACertificate caCertFile
       ekCertResult <- loadCACertificate ekCertFile -- Reuse the same function for loading EK cert
       case (keyResult, certResult, ekCertResult) of
-        (Right privKeyRaw, Right caCert, Right ekCert) -> do
+        (Right caPrivKey, Right caCert, Right ekCert) -> do
           putStrLn "CA credentials and TPM EK certificate loaded successfully"
           when (not $ null components) $ do
             putStrLn $ "Including " ++ show (length components) ++ " component(s) from configuration:"
             forM_ components $ \comp -> do
               putStrLn $ "  - " ++ ccManufacturer comp ++ " " ++ ccModel comp ++ " (Class: " ++ ccClass comp ++ ")"
-          putStrLn "Generating certificate with real signature and proper EK certificate binding..."
 
           -- Create config structure with components from YAML or empty list
           let componentIdentifiers = map yamlComponentToComponentIdentifier components
@@ -173,25 +181,86 @@ doGenerate opts _ = do
                     pcComponents = componentIdentifiers
                   }
 
-          -- Generate certificate with real signature, components, and EK cert
-          let privKey = PrivKeyRSA privKeyRaw
-          result <- createSignedPlatformCertificate platformConfig componentIdentifiers tpmInfo privKey caCert ekCert
-          case result of
-            Right cert -> do
-              putStrLn $ "Certificate generated successfully with real signature and EK certificate binding"
-              -- Convert to DER and then to PEM
-              let derBytes = encodeSignedPlatformCertificate cert
-                  pem =
-                    PEM
-                      { pemName = "PLATFORM CERTIFICATE",
-                        pemHeader = [],
-                        pemContent = derBytes
-                      }
-              writePEMFile outputFile [pem]
-              putStrLn $ "Certificate written to: " ++ outputFile
+          -- COMPREHENSIVE PRE-GENERATION VALIDATION
+          putStrLn ""
+          putStrLn " Performing comprehensive pre-generation validation..."
+          putStrLn " This validation ensures full TCG Platform Certificate Profile v1.1 compliance"
+          putStrLn ""
+
+          -- Step 1: Basic validations
+          configValidation <- validatePlatformConfiguration platformConfig
+          -- TODO Too many nested case - refactor
+          case configValidation of
             Left err -> do
-              putStrLn $ "Certificate generation failed: " ++ err
+              putStrLn err
               exitFailure
+            Right _ -> do
+              componentValidation <- validateComponentIdentifiers componentIdentifiers
+              case componentValidation of
+                Left err -> do
+                  putStrLn err
+                  exitFailure
+                Right _ -> do
+                  hashValidation <- validateHashAlgorithm hashAlg
+                  case hashValidation of
+                    Left err -> do
+                      putStrLn err
+                      exitFailure
+                    Right _ -> do
+                      keyValidation <- validatePrivateKeyCompatibility caPrivKey hashAlg
+                      case keyValidation of
+                        Left err -> do
+                          putStrLn err
+                          exitFailure
+                        Right _ -> do
+                          -- Step 2: Comprehensive context validation
+                          contextValidation <-
+                            validateCertificateGenerationContext
+                              platformConfig
+                              componentIdentifiers
+                              caPrivKey
+                              caCert
+                              ekCert
+                              hashAlg
+                          case contextValidation of
+                            Left err -> do
+                              putStrLn err
+                              exitFailure
+                            Right _ -> do
+                              putStrLn ""
+                              putStrLn " ALL COMPREHENSIVE VALIDATIONS PASSED!"
+                              putStrLn " Certificate generation ready with full TCG v1.1 compliance"
+                              putStrLn " Generating certificate with real signature and proper EK certificate binding..."
+
+                          -- Generate certificate with real signature, components, and EK cert
+                          putStrLn $ "Using hash algorithm: " ++ hashAlg
+                          result <- createSignedPlatformCertificate platformConfig componentIdentifiers tpmInfo caPrivKey caCert ekCert hashAlg
+                          case result of
+                            Right cert -> do
+                              putStrLn $ "Certificate generated successfully with real signature and EK certificate binding"
+
+                              -- POST-GENERATION VERIFICATION
+                              verificationResult <- verifyGeneratedCertificate cert platformConfig componentIdentifiers
+                              case verificationResult of
+                                Left err -> do
+                                  putStrLn err
+                                  putStrLn "  Certificate generation completed but verification failed"
+                                  putStrLn "  The generated certificate may not comply with standards"
+                                  exitFailure
+                                Right _ -> do
+                                  -- Convert to DER and then to PEM
+                                  let derBytes = encodeSignedPlatformCertificate cert
+                                      pem =
+                                        PEM
+                                          { pemName = "PLATFORM CERTIFICATE",
+                                            pemHeader = [],
+                                            pemContent = derBytes
+                                          }
+                                  writePEMFile outputFile [pem]
+                                  putStrLn $ "Certificate written to: " ++ outputFile
+                            Left err -> do
+                              putStrLn $ "Certificate generation failed: " ++ err
+                              exitFailure
         (Left keyErr, _, _) -> do
           putStrLn $ "Error loading CA private key: " ++ keyErr
           exitFailure
@@ -213,7 +282,7 @@ doGenerateDelta opts _ = do
 
   -- Check for config file option first
   let configFile = extractOpt "config" (\case ConfigFile f -> Just f; _ -> Nothing) opts ""
-  
+
   -- Extract options
   let baseCertFile = extractOpt "base-cert" (\case BaseCertificate f -> Just f; _ -> Nothing) opts ""
       _baseSerial = extractOpt "base-serial" (\case BaseSerial s -> Just s; _ -> Nothing) opts ""
@@ -249,11 +318,12 @@ doGenerateDelta opts _ = do
       certResult <- loadCACertificate caCertFile
 
       case (keyResult, certResult) of
-        (Right _privKey, Right _caCert) -> do
+        (Right _caPrivKey, Right _caCert) -> do
           putStrLn "CA credentials loaded successfully"
 
           -- Load and parse the base platform certificate
           baseCertResult <- loadBasePlatformCertificate baseCertFile
+          -- TODO Too many nested case - refactor
           case baseCertResult of
             Left baseErr -> do
               putStrLn $ "Error loading base platform certificate: " ++ baseErr
@@ -263,26 +333,27 @@ doGenerateDelta opts _ = do
               putStrLn "Generating delta certificate with component changes..."
 
               -- Load configuration from YAML file if provided
-              deltaInfo <- if null configFile
-                then do
-                  putStrLn $ "Using command-line options for delta configuration"
-                  putStrLn $ "Component changes specified: " ++ componentChanges
-                  return Nothing
-                else do
-                  putStrLn $ "Loading delta configuration from: " ++ configFile
-                  result <- loadDeltaConfig configFile
-                  case result of
-                    Left err -> do
-                      putStrLn $ "Error loading delta config file: " ++ err
-                      exitFailure
-                    Right config -> do
-                      putStrLn $ "Delta configuration loaded successfully"
-                      putStrLn $ "Delta serial: " ++ fromMaybe "None" (dccBaseCertificateSerial config)
-                      putStrLn $ "Change description: " ++ fromMaybe "None" (dccChangeDescription config)
-                      putStrLn $ "Including " ++ show (length (dccComponents config)) ++ " component(s) from configuration:"
-                      forM_ (dccComponents config) $ \comp -> do
-                        putStrLn $ "  - " ++ ccManufacturer comp ++ " " ++ ccModel comp ++ " (Class: " ++ ccClass comp ++ ")"
-                      return (Just config)
+              _deltaInfo <-
+                if null configFile
+                  then do
+                    putStrLn $ "Using command-line options for delta configuration"
+                    putStrLn $ "Component changes specified: " ++ componentChanges
+                    return Nothing
+                  else do
+                    putStrLn $ "Loading delta configuration from: " ++ configFile
+                    result <- loadDeltaConfig configFile
+                    case result of
+                      Left err -> do
+                        putStrLn $ "Error loading delta config file: " ++ err
+                        exitFailure
+                      Right config -> do
+                        putStrLn $ "Delta configuration loaded successfully"
+                        putStrLn $ "Delta serial: " ++ fromMaybe "None" (dccBaseCertificateSerial config)
+                        putStrLn $ "Change description: " ++ fromMaybe "None" (dccChangeDescription config)
+                        putStrLn $ "Including " ++ show (length (dccComponents config)) ++ " component(s) from configuration:"
+                        forM_ (dccComponents config) $ \comp -> do
+                          putStrLn $ "  - " ++ ccManufacturer comp ++ " " ++ ccModel comp ++ " (Class: " ++ ccClass comp ++ ")"
+                        return (Just config)
 
               -- Generate delta certificate (enhanced implementation with YAML support)
               putStrLn "Delta certificate generation with YAML configuration support is now implemented!"
@@ -290,7 +361,7 @@ doGenerateDelta opts _ = do
               putStrLn "Delta certificate features:"
               putStrLn "- Base certificate validation and loading ✓"
               putStrLn "- CA credentials verification ✓"
-              putStrLn "- YAML configuration file support ✓" 
+              putStrLn "- YAML configuration file support ✓"
               putStrLn "- Extended platform fields support ✓"
               putStrLn "- Component change tracking ✓"
               putStrLn "- Delta certificate structure definition ✓"
@@ -321,6 +392,7 @@ doShow opts files = do
   putStrLn $ "Reading certificate from: " ++ file
 
   -- Read and parse the PEM file
+  -- TODO Too nested case - refactor
   result <- readPEMFile file
   case result of
     [] -> do
@@ -386,30 +458,32 @@ doValidate opts files = do
   putStrLn ""
 
   -- Load CA certificate if provided
-  mCaCert <- if null caCertFile
-    then return Nothing
-    else do
-      putStrLn $ "Loading CA certificate from: " ++ caCertFile
-      caPemResult <- readPEMFile caCertFile
-      case caPemResult of
-        [] -> do
-          putStrLn "❌ FAILED: No CA certificate found in file"
-          exitFailure
-        (caPem : _) -> do
-          case decodeSignedCertificate (pemContent caPem) of
-            Left caCertErr -> do
-              putStrLn $ "❌ FAILED: CA certificate parsing failed: " ++ show caCertErr
-              exitFailure
-            Right signedCaCert -> do
-              let caCert = getCertificate signedCaCert
-              putStrLn "✅ CA certificate loaded successfully"
-              return (Just caCert)
+  mCaCert <-
+    if null caCertFile
+      then return Nothing
+      else do
+        -- TODO Too nested case - refactor
+        putStrLn $ "Loading CA certificate from: " ++ caCertFile
+        caPemResult <- readPEMFile caCertFile
+        case caPemResult of
+          [] -> do
+            putStrLn " FAILED: No CA certificate found in file"
+            exitFailure
+          (caPem : _) -> do
+            case decodeSignedCertificate (pemContent caPem) of
+              Left caCertErr -> do
+                putStrLn $ " FAILED: CA certificate parsing failed: " ++ show caCertErr
+                exitFailure
+              Right signedCaCert -> do
+                let caCert = getCertificate signedCaCert
+                putStrLn " CA certificate loaded successfully"
+                return (Just caCert)
 
   -- Read and parse the platform certificate file
   result <- readPEMFile file
   case result of
     [] -> do
-      putStrLn "❌ FAILED: No certificates found in file"
+      putStrLn " FAILED: No certificates found in file"
       exitFailure
     (pem : _) -> do
       currentTime <- getCurrentTime
@@ -417,14 +491,14 @@ doValidate opts files = do
       -- Try to decode as Platform Certificate
       case decodeSignedPlatformCertificate (pemContent pem) of
         Left err -> do
-          putStrLn "❌ FAILED: Certificate parsing failed"
+          putStrLn " FAILED: Certificate parsing failed"
           putStrLn $ "   Error: " ++ err
           putStrLn ""
 
           -- Try basic ASN.1 validation
           case decodeASN1' BER (pemContent pem) of
             Left asn1err -> do
-              putStrLn "❌ FAILED: ASN.1 parsing also failed"
+              putStrLn " FAILED: ASN.1 parsing also failed"
               putStrLn $ "   ASN.1 Error: " ++ show asn1err
               exitFailure
             Right asn1 -> do
@@ -452,6 +526,7 @@ doComponents opts files = do
 
   -- Read and parse the PEM file
   result <- readPEMFile file
+  -- TODO Too nested case - refactor
   case result of
     [] -> do
       putStrLn "Error: No certificates found in file"
@@ -511,6 +586,7 @@ optionsGenerate =
     Option ['c'] ["ca-cert"] (ReqArg CACertificate "FILE") "CA certificate file (PEM format) [REQUIRED]",
     Option ['e'] ["ek-cert"] (ReqArg TPMEKCertificate "FILE") "TPM EK certificate file (PEM format) [REQUIRED]",
     Option ['f'] ["config"] (ReqArg ConfigFile "FILE") "YAML configuration file (alternative to individual options)",
+    Option [] ["hash"] (ReqArg HashAlgorithm "ALGORITHM") "Hash algorithm (sha256|sha384|sha512, default: sha384)",
     Option ['h'] ["help"] (NoArg Help) "show help"
   ]
 
@@ -522,6 +598,7 @@ optionsGenerateDelta =
     Option [] ["component-changes"] (ReqArg ComponentChanges "CHANGES") "component changes description",
     Option ['k'] ["ca-key"] (ReqArg CAPrivateKey "FILE") "CA private key file (PEM format) [REQUIRED]",
     Option ['c'] ["ca-cert"] (ReqArg CACertificate "FILE") "CA certificate file (PEM format) [REQUIRED]",
+    Option [] ["hash"] (ReqArg HashAlgorithm "ALGORITHM") "Hash algorithm (sha256|sha384|sha512, default: sha384)",
     Option ['h'] ["help"] (NoArg Help) "show help"
   ]
 

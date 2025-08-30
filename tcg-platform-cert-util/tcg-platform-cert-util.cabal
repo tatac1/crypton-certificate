@@ -46,6 +46,11 @@ Executable           tcg-platform-cert-util
   Default-Language:  Haskell2010
   Main-Is:           Main.hs
   hs-source-dirs:    src
+  Other-modules:     Data.X509.TCG.Util.ASN1
+                   , Data.X509.TCG.Util.CLI  
+                   , Data.X509.TCG.Util.Certificate
+                   , Data.X509.TCG.Util.Config
+                   , Data.X509.TCG.Util.Display
   Buildable:         True
   Build-depends:     base >= 4 && < 5
                    , bytestring
@@ -83,6 +88,7 @@ Test-Suite           test-tcg-platform-cert-util
                    , time
                    , crypton
                    , crypton-x509 >= 1.7.1
+                   , crypton-x509-store >= 1.6.7
                    , asn1-types >= 0.3
                    , asn1-encoding
                    , tcg-platform-cert
@@ -94,6 +100,7 @@ Test-Suite           test-tcg-platform-cert-util
                    , QuickCheck
                    , quickcheck-instances
                    , temporary
+                   , sbv >= 8.0
   GHC-Options:       -Wall
 
 source-repository head

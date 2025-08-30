@@ -21,7 +21,6 @@ import System.Exit (exitFailure)
 
 -- Module imports
 import Data.X509.TCG.Util.CLI
-import Data.X509.TCG.Util.Config (createExampleConfig)
 
 -- | Command implementations
 generateMain :: [String] -> IO ()

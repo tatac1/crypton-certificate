@@ -139,18 +139,18 @@ tcg-platform-cert-util validate --verbose my-platform.pem
 ```
 Validating certificate: simple-test.pem
 
-❌ FAILED: Certificate parsing failed
+FAILED: Certificate parsing failed
    Error: signed object error: "V2Form: issuerName MUST contain one and only one GeneralName"
 
 === BASIC ASN.1 VALIDATION ===
 
 1. ASN.1 Structure Check:
-   ✅ PASSED: ASN.1 parsing successful
+   PASSED: ASN.1 parsing successful
 
 2. Certificate Elements Check:
-   Sequence structure: ✅ PASSED
-   Version field: ✅ PASSED
-   Attribute data: ✅ PASSED
+   Sequence structure: PASSED
+   Version field: PASSED
+   Attribute data: PASSED
 ```
 
 ### Components Command
@@ -186,10 +186,10 @@ Component Analysis from ASN.1 Structure:
 ## Development Status
 
 Current implementation status:
-- ✅ **Generate command** - Working, generates dummy-signed certificates
-- ✅ **Show command** - Working with ASN.1 fallback for parsing issues
-- ✅ **Validate command** - Working, validates certificate structure and attributes  
-- ✅ **Components command** - Working, extracts platform and component information
+-  **Generate command** - Working, generates dummy-signed certificates
+-  **Show command** - Working with ASN.1 fallback for parsing issues
+-  **Validate command** - Working, validates certificate structure and attributes  
+-  **Components command** - Working, extracts platform and component information
 
 ## Technical Notes
 
