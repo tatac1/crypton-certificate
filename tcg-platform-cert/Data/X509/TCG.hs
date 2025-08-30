@@ -78,6 +78,8 @@ module Data.X509.TCG
     Pair (..),
     generateKeys,
     hashSHA256,
+    hashSHA384,
+    hashSHA512,
     validatePlatformCertificate,
     validateDeltaCertificate',
 
@@ -112,7 +114,7 @@ where
 
 -- Cryptographic signing imports
 
-import Crypto.Hash (HashAlgorithm, SHA256 (..), hashWith)
+import Crypto.Hash (HashAlgorithm, SHA256 (..), SHA384 (..), SHA512 (..), hashWith)
 import qualified Crypto.PubKey.DSA as DSA
 import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
 import qualified Crypto.PubKey.ECC.Generate as ECC
@@ -125,7 +127,7 @@ import qualified Crypto.PubKey.RSA.PSS as PSS
 import Data.ASN1.BinaryEncoding (DER (..))
 import Data.ASN1.Encoding (encodeASN1')
 import Data.ASN1.Types
-import Data.ASN1.Types.String (asn1CharacterString, ASN1StringEncoding(..))
+import Data.ASN1.Types.String ()
 import Data.ByteArray (convert)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as B8
@@ -149,6 +151,12 @@ data GHash hash = GHash {getHashALG :: HashALG, getHashAlgorithm :: hash}
 
 hashSHA256 :: GHash SHA256
 hashSHA256 = GHash HashSHA256 SHA256
+
+hashSHA384 :: GHash SHA384
+hashSHA384 = GHash HashSHA384 SHA384
+
+hashSHA512 :: GHash SHA512
+hashSHA512 = GHash HashSHA512 SHA512
 
 -- | Signature and hash algorithms instantiated with parameters for Platform Certificates.
 data Alg pub priv where
@@ -307,8 +315,9 @@ createPlatformCertificate ::
   [ComponentIdentifier] ->
   TPMInfo ->
   Certificate -> -- TPM EK Certificate for proper Holder binding
+  String -> -- Hash algorithm ("sha256", "sha384", "sha512")
   IO (Either String SignedPlatformCertificate)
-createPlatformCertificate config components tpmInfo ekCert = return $ createPlatformCertificateSync config components tpmInfo ekCert
+createPlatformCertificate config components tpmInfo ekCert hashAlg = return $ createPlatformCertificateSync config components tpmInfo ekCert hashAlg
 
 -- | Synchronous version of createPlatformCertificate for easier testing
 createPlatformCertificateSync ::
@@ -316,10 +325,11 @@ createPlatformCertificateSync ::
   [ComponentIdentifier] ->
   TPMInfo ->
   Certificate -> -- TPM EK Certificate
+  String -> -- Hash algorithm ("sha256", "sha384", "sha512")
   Either String SignedPlatformCertificate
-createPlatformCertificateSync config components tpmInfo ekCert = do
+createPlatformCertificateSync config components tpmInfo ekCert hashAlg = do
   -- Create the basic certificate info structure with EK certificate binding
-  certInfo <- buildPlatformCertificateInfo config components tpmInfo ekCert
+  certInfo <- buildPlatformCertificateInfo config components tpmInfo ekCert hashAlg
 
   -- Create a signed certificate using a dummy signature
   -- In production, this would use a real private key and signing algorithm
@@ -334,14 +344,15 @@ buildPlatformCertificateInfo ::
   [ComponentIdentifier] ->
   TPMInfo ->
   Certificate -> -- TPM EK Certificate
+  String -> -- Hash algorithm ("sha256", "sha384", "sha512")
   Either String PlatformCertificateInfo
-buildPlatformCertificateInfo config components tpmInfo ekCert = do
+buildPlatformCertificateInfo config components tpmInfo ekCert hashAlg = do
   -- Create basic validity period (1 year from now) - will be overridden by mkPlatformCertificate
   let validityStart = DateTime (Date 2024 December 1) (TimeOfDay 0 0 0 0)
       validityEnd = DateTime (Date 2025 December 1) (TimeOfDay 0 0 0 0)
       validity = AttCertValidityPeriod validityStart validityEnd
 
-  buildPlatformCertificateInfoWithValidity config components tpmInfo validity ekCert
+  buildPlatformCertificateInfoWithValidity config components tpmInfo validity ekCert hashAlg
 
 -- | Helper function to build PlatformCertificateInfo with custom validity period
 buildPlatformCertificateInfoWithValidity ::
@@ -350,17 +361,22 @@ buildPlatformCertificateInfoWithValidity ::
   TPMInfo ->
   AttCertValidityPeriod ->
   Certificate -> -- TPM EK Certificate
+  String -> -- Hash algorithm ("sha256", "sha384", "sha512")
   Either String PlatformCertificateInfo
-buildPlatformCertificateInfoWithValidity config components tpmInfo validity ekCert =
+buildPlatformCertificateInfoWithValidity config components tpmInfo validity ekCert hashAlg =
   -- Create holder referencing TPM EK certificate (secure by default)
   -- Use ObjectDigestInfo with public key hash to prevent CA name collision attacks
   let pubKeyBytes = encodeASN1' DER $ toASN1 (certPubKey ekCert) []
-      pubKeyHash = convert $ hashWith SHA256 pubKeyBytes
+      (pubKeyHash, hashALG) = case hashAlg of
+        "sha256" -> (convert $ hashWith SHA256 pubKeyBytes, HashSHA256)
+        "sha384" -> (convert $ hashWith SHA384 pubKeyBytes, HashSHA384)  
+        "sha512" -> (convert $ hashWith SHA512 pubKeyBytes, HashSHA512)
+        _        -> (convert $ hashWith SHA384 pubKeyBytes, HashSHA384)  -- Default to SHA384
       objectDigestInfo = ObjectDigestInfo 
         { odiObjectType = OIDPublicKeyCert  -- Reference to the public key certificate
         , odiOtherObjectTypeID = Nothing    -- Not needed for publicKeyCert type
-        , odiDigestAlgorithm = SignatureALG HashSHA256 PubKeyALG_RSA  -- Hash algorithm used
-        , odiObjectDigest = pubKeyHash      -- SHA256 hash of the EK certificate's public key
+        , odiDigestAlgorithm = SignatureALG hashALG PubKeyALG_RSA  -- Hash algorithm used
+        , odiObjectDigest = pubKeyHash      -- Configurable hash of the EK certificate's public key
         }
       holder = HolderObjectDigestInfo objectDigestInfo
 
@@ -384,7 +400,7 @@ buildPlatformCertificateInfoWithValidity config components tpmInfo validity ekCe
            { pciVersion = 2, -- v2 certificate
              pciHolder = holder,
              pciIssuer = acIssuer,
-             pciSignature = SignatureALG HashSHA256 PubKeyALG_RSA,
+             pciSignature = SignatureALG HashSHA384 PubKeyALG_RSA,
              pciSerialNumber = 1, -- Simple serial number
              pciValidity = validity,
              pciAttributes = attrs,
@@ -433,7 +449,7 @@ buildAttributesFromConfig config components _tpmInfo = do
 -- In production, replace with proper cryptographic signing
 createDummySigningFunction :: B.ByteString -> (B.ByteString, SignatureALG, ())
 createDummySigningFunction _dataToSign =
-  (B.replicate 32 0x42, SignatureALG HashSHA256 PubKeyALG_RSA, ()) -- 32 bytes of dummy signature data
+  (B.replicate 48 0x42, SignatureALG HashSHA384 PubKeyALG_RSA, ()) -- 48 bytes of dummy signature data (SHA384)
 
 -- * Production Platform Certificate Creation
 
@@ -463,11 +479,13 @@ mkPlatformCertificate ::
   Auth pubI privI pubS privS ->
   -- | Keys for the new certificate
   Keys pubS privS ->
+  -- | Hash algorithm ("sha256", "sha384", "sha512")
+  String ->
   -- | Result: signed Platform Certificate pair
   IO (Either String (Pair pubS privS))
-mkPlatformCertificate config components tpmInfo ekCert validity auth (algS, _pubKey, privKey) = do
+mkPlatformCertificate config components tpmInfo ekCert validity auth (algS, _pubKey, privKey) hashAlg = do
   let validityPeriod = uncurry AttCertValidityPeriod validity
-  case buildPlatformCertificateInfoWithValidity config components tpmInfo validityPeriod ekCert of
+  case buildPlatformCertificateInfoWithValidity config components tpmInfo validityPeriod ekCert hashAlg of
     Left err -> return $ Left err
     Right certInfo -> do
       -- Apply authority settings to the certificate
@@ -547,7 +565,7 @@ createDeltaPlatformCertificate baseCert componentDeltas changeRecords = do
           { dpciVersion = 2,
             dpciHolder = pciHolder baseCertInfo, -- Same holder as base
             dpciIssuer = baseIssuer,
-            dpciSignature = SignatureALG HashSHA256 PubKeyALG_RSA, -- Default signature
+            dpciSignature = SignatureALG HashSHA384 PubKeyALG_RSA, -- Default signature
             dpciSerialNumber = baseSerial + 1, -- Increment serial number
             dpciValidity = pciValidity baseCertInfo, -- Same validity period
             dpciAttributes = deltaAttrs,
@@ -559,7 +577,7 @@ createDeltaPlatformCertificate baseCert componentDeltas changeRecords = do
   -- For now, create a dummy signed certificate
   -- This is a basic implementation that creates the structure
   let dummySignature = B.pack [0, 0, 0, 0] -- Placeholder signature
-      signatureAlg = SignatureALG HashSHA256 PubKeyALG_RSA
+      signatureAlg = SignatureALG HashSHA384 PubKeyALG_RSA
       signingFunction _ = return (dummySignature, signatureAlg)
 
   signedDelta <- objectToSignedExactF signingFunction deltaCertInfo

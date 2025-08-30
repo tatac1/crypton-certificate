@@ -4,7 +4,6 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import qualified Data.ByteString.Char8 as B
 import Data.X509.TCG.Component
-import Data.X509.TCG.Platform
 
 -- Note: Most validation functions have been moved to the separate
 -- tcg-platform-cert-validation package. These tests now focus on
