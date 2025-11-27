@@ -89,7 +89,6 @@ module Data.X509.TCG.Certification
 
 import Data.ASN1.Types
 import qualified Data.ByteString as B
-import qualified Data.ByteString.Char8 as BC
 import Data.Data (Data, Typeable)
 import Data.Hourglass (DateTime)
 import Data.Word (Word32)
@@ -537,7 +536,7 @@ extractOptionalTime rest = (Nothing, rest)
 
 -- | Validate FIPS level consistency
 validateFIPSLevel :: FIPSLevel -> Either String ()
-validateFIPSLevel (FIPSLevel ver level _) = Right () -- Simplified validation
+validateFIPSLevel (FIPSLevel _ver _level _) = Right () -- Simplified validation
 
 -- | Validate EAL level 
 validateEALLevel :: CommonCriteriaLevel -> Either String ()

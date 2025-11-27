@@ -35,7 +35,7 @@ module Data.X509.TCG.Util.Display
   )
 where
 
-import Control.Monad (forM_, unless, when)
+import Control.Monad (forM_, unless)
 import Data.ASN1.BinaryEncoding (DER (..))
 import Data.ASN1.Encoding (decodeASN1')
 import Data.ASN1.Types (ASN1 (..), ASN1CharacterString (..), ASN1ConstructionType (..), ASN1Class (..))
@@ -464,8 +464,9 @@ parsePlatformConfigV2 indent asn1List = go asn1List 1
     go (_ : rest) n = go rest n
 
     spanUntilEndContainer :: [ASN1] -> ([ASN1], [ASN1])
-    spanUntilEndContainer xs = spanNested 0 xs []
+    spanUntilEndContainer xs = spanNested (0 :: Int) xs []
       where
+        spanNested :: Int -> [ASN1] -> [ASN1] -> ([ASN1], [ASN1])
         spanNested _ [] acc = (reverse acc, [])
         spanNested depth (End (Container _ _) : rest) acc
           | depth == 0 = (reverse acc, rest)
@@ -486,8 +487,9 @@ parseComponentList indent asn1List startIdx = go asn1List startIdx
     go (_ : rest) n = go rest n
 
     spanUntilEndSeq :: [ASN1] -> ([ASN1], [ASN1])
-    spanUntilEndSeq xs = spanNested 0 xs []
+    spanUntilEndSeq xs = spanNested (0 :: Int) xs []
       where
+        spanNested :: Int -> [ASN1] -> [ASN1] -> ([ASN1], [ASN1])
         spanNested _ [] acc = (reverse acc, [])
         spanNested depth (End Sequence : rest) acc
           | depth == 0 = (reverse acc, rest)
@@ -502,7 +504,7 @@ parseComponentIdentifier indent asn1List idx = do
   let (classOid, classValue) = extractComponentClass asn1List
       mfg = extractUTF8String asn1List 0
       model = extractUTF8String asn1List 1
-      serial = extractTaggedUTF8 asn1List 0
+      serialNum = extractTaggedUTF8 asn1List 0
       revision = extractTaggedUTF8 asn1List 1
       addresses = extractComponentAddresses asn1List
       status = extractComponentStatus asn1List
@@ -536,7 +538,7 @@ parseComponentIdentifier indent asn1List idx = do
   case model of
     Just m -> putStrLn $ indent ++ "    Model: " ++ BC.unpack m
     Nothing -> return ()
-  case serial of
+  case serialNum of
     Just s -> putStrLn $ indent ++ "    Serial: " ++ BC.unpack s
     Nothing -> return ()
   case revision of
@@ -714,8 +716,8 @@ showValidityPeriod (AttCertValidityPeriod start end) = do
   putStrLn $ "    Not After:  " ++ timePrint ("YYYY-MM-DD H:MI:S" :: String) end ++ " UTC"
 
 -- | Show a component in improved format with class value
-showComponentImproved :: Int -> ComponentIdentifier -> IO ()
-showComponentImproved i comp = do
+_showComponentImproved :: Int -> ComponentIdentifier -> IO ()
+_showComponentImproved i comp = do
   putStrLn $ "    [" ++ show i ++ "] Component"
   putStrLn $ "        Manufacturer: " ++ formatBS (ciManufacturer comp)
   putStrLn $ "        Model: " ++ formatBS (ciModel comp)
@@ -724,8 +726,8 @@ showComponentImproved i comp = do
     Nothing -> return ()
 
 -- | Show a component v2 in improved format with class value
-showComponentV2Improved :: Int -> ComponentIdentifierV2 -> IO ()
-showComponentV2Improved i comp = do
+_showComponentV2Improved :: Int -> ComponentIdentifierV2 -> IO ()
+_showComponentV2Improved i comp = do
   putStrLn $ "    [" ++ show i ++ "] " ++ componentClassName (ci2ComponentClass comp)
         ++ " (" ++ formatComponentClassHex (ci2ComponentClass comp) ++ ")"
   putStrLn $ "        Manufacturer: " ++ formatBS (ci2Manufacturer comp)
@@ -763,8 +765,8 @@ formatComponentClassHex cls = case cls of
   ComponentOther _ -> "0x00000000"
 
 -- | Show TCG attributes in improved format with OID names
-showTCGAttributesImproved :: [TCGAttribute] -> IO ()
-showTCGAttributesImproved attrs = do
+_showTCGAttributesImproved :: [TCGAttribute] -> IO ()
+_showTCGAttributesImproved attrs = do
   putStrLn "  TCG Attributes:"
   forM_ attrs $ \attr -> case attr of
     TCGPlatformConfiguration _ ->
@@ -925,8 +927,9 @@ parsePlatformConfigComponents indent asn1List = go asn1List 1
     go (_ : rest) n = go rest n
 
     spanUntilEndContainerComp :: [ASN1] -> ([ASN1], [ASN1])
-    spanUntilEndContainerComp xs = spanNested 0 xs []
+    spanUntilEndContainerComp xs = spanNested (0 :: Int) xs []
       where
+        spanNested :: Int -> [ASN1] -> [ASN1] -> ([ASN1], [ASN1])
         spanNested _ [] acc = (reverse acc, [])
         spanNested depth (End (Container _ _) : rest) acc
           | depth == 0 = (reverse acc, rest)
@@ -947,8 +950,9 @@ parseCompList indent asn1List startIdx = go asn1List startIdx
     go (_ : rest) n = go rest n
 
     spanUntilEndSeqComp :: [ASN1] -> ([ASN1], [ASN1])
-    spanUntilEndSeqComp xs = spanNested 0 xs []
+    spanUntilEndSeqComp xs = spanNested (0 :: Int) xs []
       where
+        spanNested :: Int -> [ASN1] -> [ASN1] -> ([ASN1], [ASN1])
         spanNested _ [] acc = (reverse acc, [])
         spanNested depth (End Sequence : rest) acc
           | depth == 0 = (reverse acc, rest)
@@ -963,7 +967,7 @@ parseCompIdentifier indent asn1List idx = do
   let (classOid, classValue) = extractComponentClass asn1List
       mfg = extractUTF8String asn1List 0
       model = extractUTF8String asn1List 1
-      serial = extractTaggedUTF8 asn1List 0
+      serialNum = extractTaggedUTF8 asn1List 0
       revision = extractTaggedUTF8 asn1List 1
       addresses = extractComponentAddresses asn1List
       status = extractComponentStatus asn1List
@@ -997,7 +1001,7 @@ parseCompIdentifier indent asn1List idx = do
   case model of
     Just m -> putStrLn $ indent ++ "    Model: " ++ BC.unpack m
     Nothing -> return ()
-  case serial of
+  case serialNum of
     Just s -> putStrLn $ indent ++ "    Serial: " ++ BC.unpack s
     Nothing -> return ()
   case revision of
@@ -1161,15 +1165,15 @@ componentClassName cls = case cls of
   ComponentOther oid -> "Other (" ++ formatOIDWithName oid ++ ")"
 
 -- | Extract ComponentIdentifiers from TCGAttributes
-extractComponentsFromTCGAttrs :: [TCGAttribute] -> [ComponentIdentifier]
-extractComponentsFromTCGAttrs = concatMap extractComp
+_extractComponentsFromTCGAttrs :: [TCGAttribute] -> [ComponentIdentifier]
+_extractComponentsFromTCGAttrs = concatMap extractComp
   where
     extractComp (TCGComponentIdentifier (ComponentIdentifierAttr comp _)) = [comp]
     extractComp _ = []
 
 -- | Extract ComponentIdentifierV2 from TCGAttributes
-extractComponentsV2FromTCGAttrs :: [TCGAttribute] -> [ComponentIdentifierV2]
-extractComponentsV2FromTCGAttrs = concatMap extractComp
+_extractComponentsV2FromTCGAttrs :: [TCGAttribute] -> [ComponentIdentifierV2]
+_extractComponentsV2FromTCGAttrs = concatMap extractComp
   where
     extractComp (TCGComponentIdentifierV2 (ComponentIdentifierV2Attr comp _ _)) = [comp]
     extractComp _ = []

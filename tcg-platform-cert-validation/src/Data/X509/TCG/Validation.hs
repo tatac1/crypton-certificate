@@ -39,7 +39,7 @@ import Data.X509.TCG hiding (validateAttributeCompliance, validateCertificateCha
 import Data.X509.TCG.Validation.Cache
 import qualified Data.X509.TCG.Validation.Internal as Internal
 import Data.X509.TCG.Validation.Types
-import Data.X509AC (AttCertValidityPeriod (..), Attributes (..))
+import Data.X509AC (Attributes (..))
 
 -- * Main Validation Functions
 

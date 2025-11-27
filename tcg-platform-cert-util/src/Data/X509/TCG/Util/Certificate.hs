@@ -495,29 +495,29 @@ validateCertificateGenerationContext config components caPrivKey caCert ekCert h
     Left err -> return $ Left err
     Right _ -> performRemainingValidations caPrivKey caCert hashAlg config components ekCert
   where
-    performRemainingValidations caPrivKey caCert hashAlg config components ekCert = do
+    performRemainingValidations caPrivKey' caCert' hashAlg' config' components' ekCert' = do
       -- 2. EK Certificate Validation
       putStrLn ""
       putStrLn "6. TPM EK Certificate Validation:"
-      ekCertValidation <- validateEKCertificate ekCert
+      ekCertValidation <- validateEKCertificate ekCert'
       case ekCertValidation of
         Left err -> return $ Left err
-        Right _ -> performCryptographicValidation caPrivKey caCert hashAlg config components
-        
-    performCryptographicValidation caPrivKey caCert hashAlg config components = do
+        Right _ -> performCryptographicValidation caPrivKey' caCert' hashAlg' config' components'
+
+    performCryptographicValidation caPrivKey' caCert' hashAlg' config' components' = do
       -- 3. Cryptographic Compatibility Check
       putStrLn ""
       putStrLn "7. Cryptographic Compatibility Check:"
-      cryptoValidation <- validateCryptographicCompatibility caPrivKey caCert hashAlg
+      cryptoValidation <- validateCryptographicCompatibility caPrivKey' caCert' hashAlg'
       case cryptoValidation of
         Left err -> return $ Left err
-        Right _ -> performTCGValidation config components
-        
-    performTCGValidation config components = do
+        Right _ -> performTCGValidation config' components'
+
+    performTCGValidation config' components' = do
       -- 4. TCG Platform Certificate Profile Compliance
       putStrLn ""
       putStrLn "8. TCG Platform Certificate Profile v1.1 Compliance:"
-      tcgProfileValidation <- validateTCGProfileCompliance config components
+      tcgProfileValidation <- validateTCGProfileCompliance config' components'
       case tcgProfileValidation of
         Left err -> return $ Left err
         Right _ -> do
