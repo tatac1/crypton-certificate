@@ -14,8 +14,9 @@
 module Data.X509.TCG.OID
   ( -- * TCG OID Arc
     tcgOID,
-    
-    -- * TCG Attribute OIDs
+    tcg_paa,
+
+    -- * TCG Attribute Type OIDs (tcg-at arc: 2.23.133.2.*)
     tcg_at_platformConfiguration,
     tcg_at_platformConfiguration_v2,
     tcg_at_componentIdentifier,
@@ -34,19 +35,42 @@ module Data.X509.TCG.OID
     tcg_at_tpmModel,
     tcg_at_tpmVersion,
     tcg_at_tpmSpecification,
-    
-    -- * TCG Key Purpose OIDs  
+    tcg_at_tcgCredentialType,
+    tcg_at_tbbSecurityAssertions,
+    tcg_at_tcgPlatformSpecification,
+
+    -- * TCG Platform Attribute Authority OIDs (tcg-paa arc: 2.23.133.5.1.*)
+    tcg_paa_platformManufacturer,
+    tcg_paa_platformManufacturerId,
+    tcg_paa_platformConfigUri,
+    tcg_paa_platformModel,
+    tcg_paa_platformVersion,
+    tcg_paa_platformSerial,
+    tcg_paa_platformConfiguration,
+    tcg_paa_platformConfiguration_v2,
+
+    -- * TCG Address Type OIDs (2.23.133.17.*)
+    tcg_address_ethernetmac,
+    tcg_address_wlanmac,
+    tcg_address_bluetoothmac,
+
+    -- * TCG Component Class Registry OIDs (2.23.133.18.3.*)
+    tcg_registry_componentClass_tcg,
+    tcg_registry_componentClass_ietf,
+    tcg_registry_componentClass_dmtf,
+
+    -- * TCG Key Purpose OIDs
     tcg_kp_EKCertificate,
     tcg_kp_PlatformAttributeCertificate,
     tcg_kp_DeltaAttributeCertificate,
     tcg_kp_ComponentIdentifierCertificate,
-    
+
     -- * TCG Certificate Extension OIDs
     tcg_ce_relevantCredentials,
     tcg_ce_relevantManifests,
     tcg_ce_virtualPlatform,
     tcg_ce_multiTenant,
-    
+
     -- * Extended Platform Attribute OIDs (IWG v1.1)
     tcg_at_platformConfigUri,
     tcg_at_platformClass,
@@ -87,20 +111,25 @@ module Data.X509.TCG.OID
 import Data.ASN1.OID
 
 -- | TCG root OID arc: 2.23.133 (tcg)
-tcgOID :: OID  
+tcgOID :: OID
 tcgOID = [2, 23, 133]
 
--- * TCG Attribute OIDs
+-- | TCG Platform Attribute Authority arc: 2.23.133.5.1 (tcg-paa)
+tcg_paa :: OID
+tcg_paa = tcgOID ++ [5, 1]
+
+-- * TCG Attribute Type OIDs (tcg-at arc: 2.23.133.2.*)
 
 -- | Platform Configuration attribute OID (v1)
 -- OID: 2.23.133.2.1
 tcg_at_platformConfiguration :: OID
 tcg_at_platformConfiguration = tcgOID ++ [2, 1]
 
--- | Platform Configuration attribute OID (v2) 
--- OID: 2.23.133.2.23
+-- | Platform Configuration attribute OID (v2) - in tcg-at arc
+-- OID: 2.23.133.2.2
+-- Note: This is different from tcg_paa_platformConfiguration_v2 which is 2.23.133.5.1.7.2
 tcg_at_platformConfiguration_v2 :: OID
-tcg_at_platformConfiguration_v2 = tcgOID ++ [2, 23]
+tcg_at_platformConfiguration_v2 = tcgOID ++ [2, 2]
 
 -- | Component Identifier attribute OID (v1)
 -- OID: 2.23.133.2.2
@@ -389,3 +418,95 @@ tcg_at_firmwareVersion = tcgOID ++ [2, 27]
 -- OID: 2.23.133.2.28
 tcg_at_policyReference :: OID
 tcg_at_policyReference = tcgOID ++ [2, 28]
+
+-- | TCG Credential Type attribute
+-- OID: 2.23.133.2.17
+tcg_at_tcgCredentialType :: OID
+tcg_at_tcgCredentialType = tcgOID ++ [2, 17]
+
+-- | TBB Security Assertions attribute
+-- OID: 2.23.133.2.19
+tcg_at_tbbSecurityAssertions :: OID
+tcg_at_tbbSecurityAssertions = tcgOID ++ [2, 19]
+
+-- | TCG Platform Specification attribute
+-- OID: 2.23.133.2.25
+tcg_at_tcgPlatformSpecification :: OID
+tcg_at_tcgPlatformSpecification = tcgOID ++ [2, 25]
+
+-- * TCG Platform Attribute Authority OIDs (tcg-paa arc: 2.23.133.5.1.*)
+-- These OIDs are used in the subjectAltName extension of Platform Certificates
+
+-- | Platform Manufacturer (in subjectAltName)
+-- OID: 2.23.133.5.1.1
+tcg_paa_platformManufacturer :: OID
+tcg_paa_platformManufacturer = tcg_paa ++ [1]
+
+-- | Platform Manufacturer ID (in subjectAltName)
+-- OID: 2.23.133.5.1.2
+tcg_paa_platformManufacturerId :: OID
+tcg_paa_platformManufacturerId = tcg_paa ++ [2]
+
+-- | Platform Configuration URI (in subjectAltName)
+-- OID: 2.23.133.5.1.3
+tcg_paa_platformConfigUri :: OID
+tcg_paa_platformConfigUri = tcg_paa ++ [3]
+
+-- | Platform Model (in subjectAltName)
+-- OID: 2.23.133.5.1.4
+tcg_paa_platformModel :: OID
+tcg_paa_platformModel = tcg_paa ++ [4]
+
+-- | Platform Version (in subjectAltName)
+-- OID: 2.23.133.5.1.5
+tcg_paa_platformVersion :: OID
+tcg_paa_platformVersion = tcg_paa ++ [5]
+
+-- | Platform Serial (in subjectAltName)
+-- OID: 2.23.133.5.1.6
+tcg_paa_platformSerial :: OID
+tcg_paa_platformSerial = tcg_paa ++ [6]
+
+-- | Platform Configuration (in attribute)
+-- OID: 2.23.133.5.1.7.1
+tcg_paa_platformConfiguration :: OID
+tcg_paa_platformConfiguration = tcg_paa ++ [7, 1]
+
+-- | Platform Configuration v2 (in attribute) - IWG v1.1
+-- OID: 2.23.133.5.1.7.2
+tcg_paa_platformConfiguration_v2 :: OID
+tcg_paa_platformConfiguration_v2 = tcg_paa ++ [7, 2]
+
+-- * TCG Address Type OIDs (2.23.133.17.*)
+
+-- | Ethernet MAC address type
+-- OID: 2.23.133.17.1
+tcg_address_ethernetmac :: OID
+tcg_address_ethernetmac = tcgOID ++ [17, 1]
+
+-- | WLAN MAC address type
+-- OID: 2.23.133.17.2
+tcg_address_wlanmac :: OID
+tcg_address_wlanmac = tcgOID ++ [17, 2]
+
+-- | Bluetooth MAC address type
+-- OID: 2.23.133.17.3
+tcg_address_bluetoothmac :: OID
+tcg_address_bluetoothmac = tcgOID ++ [17, 3]
+
+-- * TCG Component Class Registry OIDs (2.23.133.18.3.*)
+
+-- | TCG Component Class Registry
+-- OID: 2.23.133.18.3.1
+tcg_registry_componentClass_tcg :: OID
+tcg_registry_componentClass_tcg = tcgOID ++ [18, 3, 1]
+
+-- | IETF Component Class Registry
+-- OID: 2.23.133.18.3.2
+tcg_registry_componentClass_ietf :: OID
+tcg_registry_componentClass_ietf = tcgOID ++ [18, 3, 2]
+
+-- | DMTF Component Class Registry
+-- OID: 2.23.133.18.3.3
+tcg_registry_componentClass_dmtf :: OID
+tcg_registry_componentClass_dmtf = tcgOID ++ [18, 3, 3]

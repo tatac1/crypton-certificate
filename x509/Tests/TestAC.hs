@@ -3,6 +3,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
+-- | Attribute Certificate ASN.1 marshalling tests.
+--
+-- Note: Validation tests have been moved to crypton-x509-ac-validation package.
 module TestAC where
 
 import Arbitrary ()
@@ -81,25 +84,61 @@ instance Arbitrary ObjectDigestInfo where
       _ -> pure Nothing
     ObjectDigestInfo dot moid <$> arbitrary <*> arbitraryBS 16 32
 
+-- | Generate optional UniqueID
+genMaybeUniqueID :: Gen (Maybe UniqueID)
+genMaybeUniqueID = do
+  hasUID <- arbitrary
+  if hasUID
+    then Just <$> (toBitArray <$> arbitraryBS 1 8 <*> pure 0)
+    else pure Nothing
+
 instance Arbitrary IssuerSerial where
-  arbitrary = IssuerSerial <$> listOf1NonEmpty arbitrary <*> (getPositive <$> arbitrary) <*> (Just <$> (toBitArray <$> arbitraryBS 1 8 <*> pure 0))
+  arbitrary = IssuerSerial
+    <$> listOf1NonEmpty arbitrary
+    <*> (getPositive <$> arbitrary)
+    <*> genMaybeUniqueID  -- Now generates both Nothing and Just cases
+
+-- | Generate optional GeneralNames for Holder entityName
+genMaybeGeneralNames :: Gen (Maybe [AltName])
+genMaybeGeneralNames = do
+  hasNames <- arbitrary
+  if hasNames
+    then Just <$> listOf1NonEmpty arbitrary
+    else pure Nothing
 
 instance Arbitrary Holder where
-  arbitrary =
-    oneof
-      [ HolderBaseCertificateID <$> arbitrary,
-        HolderEntityName <$> listOf1NonEmpty arbitrary,
-        HolderObjectDigestInfo <$> arbitrary
-      ]
+  -- RFC 5755 allows multiple optional fields to be present simultaneously
+  -- At least one SHOULD be present, but we test all combinations
+  arbitrary = do
+    mBaseCertID <- arbitrary
+    mEntityName <- genMaybeGeneralNames
+    mObjDigestInfo <- arbitrary
+    -- Ensure at least one field is present (per RFC 5755 SHOULD)
+    if all isNothing [fmap (const ()) mBaseCertID, fmap (const ()) mEntityName, fmap (const ()) mObjDigestInfo]
+      then oneof
+        [ Holder <$> (Just <$> arbitrary) <*> pure Nothing <*> pure Nothing,
+          Holder <$> pure Nothing <*> (Just <$> listOf1NonEmpty arbitrary) <*> pure Nothing,
+          Holder <$> pure Nothing <*> pure Nothing <*> (Just <$> arbitrary)
+        ]
+      else pure $ Holder mBaseCertID mEntityName mObjDigestInfo
+    where
+      isNothing Nothing = True
+      isNothing _ = False
 
 -- Generator for a valid V2Form issuer name
+-- RFC 5755 requires exactly one directoryName with non-empty DN
 genV2FormIssuerName :: Gen [AltName]
 genV2FormIssuerName = do
   dn <- suchThat arbitrary (\(DistinguishedName l) -> not (null l))
   return [AltDirectoryName dn]
 
 instance Arbitrary V2Form where
-  arbitrary = V2Form <$> genV2FormIssuerName <*> pure Nothing <*> pure Nothing
+  -- baseCertificateID and objectDigestInfo are OPTIONAL in RFC 5755 ASN.1
+  -- (profile says MUST be omitted, but parser accepts them)
+  arbitrary = V2Form
+    <$> genV2FormIssuerName
+    <*> arbitrary  -- Maybe IssuerSerial (OPTIONAL)
+    <*> arbitrary  -- Maybe ObjectDigestInfo (OPTIONAL)
 
 instance Arbitrary AttCertIssuer where
   arbitrary = AttCertIssuerV2 <$> arbitrary
@@ -183,7 +222,7 @@ instance Arbitrary AttributeCertificateInfo where
       <*> (getPositive <$> arbitrary) -- Serial number must be positive
       <*> arbitrary
       <*> arbitrary -- list of attributes
-      <*> pure Nothing -- issuer unique id
+      <*> genMaybeUniqueID -- issuer unique id (OPTIONAL, now tested)
       <*> arbitrary -- extensions
 
 -- For AttributeRaw, we need a simple ASN1 generator

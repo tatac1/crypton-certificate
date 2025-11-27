@@ -1,0 +1,58 @@
+Name:                crypton-x509-ac-validation
+version:             0.1.0
+Description:         RFC 5755 Attribute Certificate and TCG Platform Certificate validation
+License:             BSD3
+License-file:        LICENSE
+Copyright:           Vincent Hanquez <vincent@snarc.org>
+Author:              Toru Tomita <toru.tomita@gmail.com>
+Maintainer:          Toru Tomita <toru.tomita@gmail.com>
+Synopsis:            Attribute Certificate validation for RFC 5755 and TCG profiles
+Build-Type:          Simple
+Category:            Data
+stability:           experimental
+Homepage:            https://github.com/kazu-yamamoto/crypton-certificate
+Cabal-Version:       >= 1.10
+
+Library
+  Default-Language:  Haskell2010
+  Build-Depends:     base >= 4.7 && < 5
+                   , bytestring
+                   , asn1-types >= 0.3.1 && < 0.4
+                   , crypton-x509 >= 1.7.7
+                   , crypton-x509-validation >= 1.6.13
+                   , hourglass >= 0.2
+  Exposed-modules:   Data.X509.AC.Validation
+                   , Data.X509.AC.Validation.Signature
+                   , Data.X509.AC.Validation.Validity
+                   , Data.X509.AC.Validation.Path
+                   , Data.X509.AC.Validation.Revocation
+  ghc-options:       -Wall
+
+Test-Suite test-x509-ac-validation
+  Default-Language:  Haskell2010
+  type:              exitcode-stdio-1.0
+  hs-source-dirs:    Tests
+  Main-is:           Tests.hs
+  Other-modules:     TestACValidation
+                   , Certificate
+                   , TestVectors
+                   , StaticTests
+  Build-Depends:     base >= 3 && < 5
+                   , bytestring
+                   , tasty
+                   , tasty-quickcheck
+                   , tasty-hunit
+                   , hourglass
+                   , asn1-types
+                   , asn1-encoding
+                   , crypton-x509
+                   , crypton-x509-validation
+                   , crypton-x509-ac-validation
+                   , crypton
+                   , memory
+  ghc-options:       -Wall -fno-warn-orphans -fno-warn-missing-signatures
+
+source-repository head
+  type:     git
+  location: https://github.com/kazu-yamamoto/crypton-certificate
+  subdir:   x509-ac-validation

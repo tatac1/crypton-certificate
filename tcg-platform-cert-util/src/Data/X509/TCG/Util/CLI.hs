@@ -387,7 +387,6 @@ doShow opts files = do
   let file = case files of
         (f : _) -> f
         [] -> error "No files provided"
-      verbose = Verbose `elem` opts
 
   putStrLn $ "Reading certificate from: " ++ file
 
@@ -416,9 +415,7 @@ doShow opts files = do
               putStrLn $ "Content (hex): " ++ hexdump (B.take 64 (pemContent pem)) ++ "..."
             Right asn1 -> do
               putStrLn "ASN.1 Structure:"
-              if verbose
-                then showASN1 0 asn1
-                else showASN1 0 (take 20 asn1) -- Show first 20 elements only
+              showASN1 0 asn1
               putStrLn ""
 
               -- Try to extract basic information from ASN.1
@@ -428,14 +425,12 @@ doShow opts files = do
               putStrLn "Certificate information:"
               putStrLn $ "PEM Name: " ++ show (pemName pem)
               putStrLn $ "Content length: " ++ show (B.length (pemContent pem))
-              when verbose $ do
-                putStrLn ""
-                putStrLn "Full content (hex):"
-                putStrLn $ hexdump (pemContent pem)
+              putStrLn ""
+              putStrLn "Full content (hex):"
+              putStrLn $ hexdump (pemContent pem)
         Right cert -> do
-          if verbose
-            then showPlatformCert cert
-            else showPlatformCertSmall cert
+          -- Always show detailed information (verbose is now the default)
+          showPlatformCert cert
 
 -- | Validate certificate
 doValidate :: [TCGOpts] -> [String] -> IO ()

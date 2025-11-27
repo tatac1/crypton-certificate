@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 
@@ -133,7 +134,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as B8
 import Data.Hourglass (Date (..), DateTime (..), Month (..), TimeOfDay (..))
 import Data.X509 (Certificate (..), DistinguishedName (..), Extensions (..), HashALG (..), PubKeyALG (..), SignatureALG (..), objectToSignedExact, objectToSignedExactF, AltName(..))
-import Data.X509.AttCert (AttCertIssuer (..), AttCertValidityPeriod (..), Holder (..), V2Form (..), ObjectDigestInfo (..), DigestedObjectType (..))
+import Data.X509.AttCert (AttCertIssuer (..), AttCertValidityPeriod (..), Holder (..), V2Form (..), ObjectDigestInfo (..), DigestedObjectType (..), pattern HolderObjectDigestInfo)
 import Data.X509.Attribute (Attribute (..), Attributes (..))
 import Data.X509.TCG.Attributes
 import Data.X509.TCG.Component

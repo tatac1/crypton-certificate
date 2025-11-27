@@ -33,6 +33,7 @@ import Data.ASN1.Types
 import qualified Data.ByteString as B
 import Data.Maybe (mapMaybe)
 import Data.Word
+import Data.X509.TCG.Util.OID (formatOIDWithName)
 import Numeric (showHex)
 
 -- | Convert ByteString to hex string
@@ -63,7 +64,7 @@ showASN1 at = prettyPrint at
     p (BitString bits) = putStr ("bitstring: " ++ (hexdump $ bitArrayGetData bits))
     p (OctetString bs) = putStr ("octetstring: " ++ hexdump bs)
     p (Null) = putStr "null"
-    p (OID is) = putStr ("OID: " ++ show is)
+    p (OID is) = putStr ("OID: " ++ formatOIDWithName is)
     p (Real _) = putStr "real"
     p (Enumerated _) = putStr "enum"
     p (Start Sequence) = putStr "{"
@@ -189,7 +190,7 @@ extractComponentsFromASN1 asn1 verbose = do
       when (not $ null componentOIDs) $ do
         putStrLn "=== TCG Component OIDs Found ==="
         mapM_
-          (\(i, oid) -> putStrLn $ "  [" ++ show (i :: Int) ++ "] " ++ show oid)
+          (\(i, oid) -> putStrLn $ "  [" ++ show (i :: Int) ++ "] " ++ formatOIDWithName oid)
           (zip [1 ..] componentOIDs)
         putStrLn ""
 

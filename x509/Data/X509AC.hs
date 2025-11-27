@@ -7,12 +7,15 @@
 --
 -- Read/Write X.509 Attribute Certificate and their signed equivalents.
 --
--- This module provides functionality for handling Attribute Certificates as defined 
+-- This module provides functionality for handling Attribute Certificates as defined
 -- in RFC 5755. Attribute Certificates are similar to X.509 Public Key Certificates
 -- but are used to bind attributes (rather than public keys) to holders.
 --
 -- For general-purpose X.509 types and signing functions (e.g., 'DistinguishedName',
 -- 'objectToSignedExactF', 'PrivKey'), please import the main 'Data.X509' module.
+--
+-- For validation functions (profile validation, critical extension checking, etc.),
+-- import the 'Data.X509.AC.Validation' module from the crypton-x509-ac-validation package.
 module Data.X509AC
   ( -- * Core Types
     SignedAttributeCertificate,
