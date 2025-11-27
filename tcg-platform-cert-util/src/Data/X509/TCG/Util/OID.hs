@@ -54,6 +54,8 @@ module Data.X509.TCG.Util.OID
 
     -- * Component Class Value
     ComponentClassValue (..),
+    ComponentClassInfo (..),
+    parseComponentClassValue,
     lookupComponentClassName,
     lookupComponentClassCategory,
     formatComponentClassValue,

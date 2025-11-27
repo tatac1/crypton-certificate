@@ -80,7 +80,7 @@ import Data.Maybe (mapMaybe)
 import Data.X509 (DistinguishedName(..), AltName(..))
 import Data.X509.TCG hiding (extractTCGAttributes, validateAttributeCompliance, validateCertificateChain, validateComponentHierarchy, validateDeltaCertificate, validatePlatformCertificate)
 import Data.X509.TCG.Validation.Types
-import Data.X509AC hiding (ValidationError, ValidationWarning, ValidationResult, validateRFC5755Profile, validateTCGPlatform, isValid, hasErrors, hasWarnings)
+import Data.X509AC
 import System.IO.Unsafe (unsafePerformIO)
 import Time.System (dateCurrent)
 
