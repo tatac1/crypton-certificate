@@ -91,22 +91,35 @@ instance ASN1Object PlatformCertificateInfo where
         ++ [End Sequence]
     )
       ++ xs
-  fromASN1 (Start Sequence : IntVal ver : rest) = do
-    (holder, rest1) <- fromASN1 rest
-    (issuer, rest2) <- fromASN1 rest1  
-    (signature, rest3) <- fromASN1 rest2
-    case rest3 of
-      (IntVal serialNum : rest4) -> do
-        (validity, rest5) <- fromASN1 rest4
-        (attributes, rest6) <- fromASN1 rest5
-        let (uid, rest7) = extractUID rest6
-            (extensions, rest8) = extractExtensions rest7
-        case rest8 of
-          (End Sequence : remaining) -> 
+  -- Note: decodeSignedObject strips the outer SEQUENCE before calling fromASN1.
+  -- For direct fromASN1 calls (e.g., property tests), the SEQUENCE is present.
+  -- We handle both cases by checking the first element.
+  fromASN1 [] = Left "PlatformCertificateInfo: empty input"
+  fromASN1 (Start Sequence : IntVal ver : rest) = parsePCIContent ver rest True
+  fromASN1 (IntVal ver : rest) = parsePCIContent ver rest False
+  fromASN1 _ = Left "PlatformCertificateInfo: Invalid ASN1 structure"
+
+-- | Parse PlatformCertificateInfo content after version
+-- @hasOuterSequence@ indicates whether to expect End Sequence at the end
+parsePCIContent :: Integer -> [ASN1] -> Bool -> Either String (PlatformCertificateInfo, [ASN1])
+parsePCIContent ver rest hasOuterSequence = do
+  (holder, rest1) <- fromASN1 rest
+  (issuer, rest2) <- fromASN1 rest1
+  (signature, rest3) <- fromASN1 rest2
+  case rest3 of
+    (IntVal serialNum : rest4) -> do
+      (validity, rest5) <- fromASN1 rest4
+      (attributes, rest6) <- fromASN1 rest5
+      let (uid, rest7) = extractUID rest6
+          (extensions, rest8) = extractExtensions rest7
+      if hasOuterSequence
+        then case rest8 of
+          (End Sequence : remaining) ->
             Right (PlatformCertificateInfo (fromIntegral ver) holder issuer signature serialNum validity attributes uid extensions, remaining)
           _ -> Left "PlatformCertificateInfo: Invalid ASN1 sequence termination"
-      _ -> Left "PlatformCertificateInfo: Missing serial number"
-  fromASN1 _ = Left "PlatformCertificateInfo: Invalid ASN1 structure"
+        else
+          Right (PlatformCertificateInfo (fromIntegral ver) holder issuer signature serialNum validity attributes uid extensions, rest8)
+    _ -> Left "PlatformCertificateInfo: Missing serial number"
 
 -- Helper functions for ASN.1 parsing
 extractUID :: [ASN1] -> (Maybe UniqueID, [ASN1])

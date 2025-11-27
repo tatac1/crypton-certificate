@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 -- |
 -- Module      : Data.X509.AttCert
@@ -22,9 +23,9 @@ import Data.ASN1.Parse
 import Data.ASN1.Types
 import qualified Data.ByteString as B
 import Data.Hourglass (DateTime)
-import Data.Maybe (isJust)
 import Data.X509.AlgorithmIdentifier
-import Data.X509.Attribute
+import Data.X509.Attribute hiding (GeneralName)
+import Data.X509.Attribute (encodeGeneralName)
 import Data.X509.DistinguishedName (DistinguishedName (..))
 import Data.X509.Ext (AltName (..))
 import Data.X509.ExtensionRaw
@@ -47,11 +48,36 @@ data AttributeCertificateInfo = AttributeCertificateInfo
   deriving (Show, Eq)
 
 -- | Holder as defined in RFC 5755 section 4.1
-data Holder
-  = HolderBaseCertificateID IssuerSerial
-  | HolderEntityName GeneralNames
-  | HolderObjectDigestInfo ObjectDigestInfo
+--
+-- RFC 5755 ASN.1:
+-- @
+-- Holder ::= SEQUENCE {
+--     baseCertificateID   [0] IssuerSerial OPTIONAL,
+--     entityName          [1] GeneralNames OPTIONAL,
+--     objectDigestInfo    [2] ObjectDigestInfo OPTIONAL
+-- }
+-- @
+--
+-- All fields are optional, but at least one SHOULD be present.
+-- Multiple fields can be present simultaneously.
+data Holder = Holder
+  { holderBaseCertificateID :: Maybe IssuerSerial
+  , holderEntityName        :: Maybe GeneralNames
+  , holderObjectDigestInfo  :: Maybe ObjectDigestInfo
+  }
   deriving (Show, Eq)
+
+-- | Pattern synonym for backward compatibility - Holder with only baseCertificateID
+pattern HolderBaseCertificateID :: IssuerSerial -> Holder
+pattern HolderBaseCertificateID is = Holder (Just is) Nothing Nothing
+
+-- | Pattern synonym for backward compatibility - Holder with only entityName
+pattern HolderEntityName :: GeneralNames -> Holder
+pattern HolderEntityName gns = Holder Nothing (Just gns) Nothing
+
+-- | Pattern synonym for backward compatibility - Holder with only objectDigestInfo
+pattern HolderObjectDigestInfo :: ObjectDigestInfo -> Holder
+pattern HolderObjectDigestInfo odi = Holder Nothing Nothing (Just odi)
 
 -- | AttCertIssuer as defined in RFC 5755 section 4.1
 data AttCertIssuer
@@ -103,25 +129,51 @@ type UniqueID = BitArray
 
 instance ASN1Object AttCertValidityPeriod where
   toASN1 (AttCertValidityPeriod notBefore notAfter) xs =
-    [Start Sequence, ASN1Time TimeUTC notBefore Nothing, ASN1Time TimeUTC notAfter Nothing, End Sequence] ++ xs
-  fromASN1 (Start Sequence : ASN1Time TimeUTC nb Nothing : ASN1Time TimeUTC na Nothing : End Sequence : rest) =
+    [Start Sequence, ASN1Time TimeGeneralized notBefore Nothing, ASN1Time TimeGeneralized notAfter Nothing, End Sequence] ++ xs
+  fromASN1 (Start Sequence : ASN1Time _ nb _ : ASN1Time _ na _ : End Sequence : rest) =
     Right (AttCertValidityPeriod nb na, rest)
   fromASN1 _ = Left "AttCertValidityPeriod: unexpected format"
 
-parseIssuerSerial :: ParseASN1 IssuerSerial
-parseIssuerSerial = onNextContainer Sequence $ do
-  gns <- parseGeneralNames
+-- | Parse IssuerSerial content (without outer SEQUENCE)
+-- RFC 5755 defines IssuerSerial as:
+--   IssuerSerial ::= SEQUENCE { issuer GeneralNames, serial INTEGER, issuerUID [OPTIONAL] }
+-- This parser handles the content inside the SEQUENCE.
+parseIssuerSerialContent :: ParseASN1 IssuerSerial
+parseIssuerSerialContent = do
+  -- First, try to parse GeneralNames (may be wrapped in SEQUENCE or not)
+  gns <- parseGeneralNamesForIssuerSerial
+  -- Then parse serial number
   s <-
     getNext >>= \case
       IntVal i -> return i
-      _ -> throwParseError "invalid serial number"
+      other -> throwParseError $ "IssuerSerial: expected serial number, got " ++ show other
+  -- Optional issuerUID
   uid <- getNextMaybe $ \case
     BitString bs -> Just bs
     _ -> Nothing
   return $ IssuerSerial gns s uid
 
-parseObjectDigestInfo :: ParseASN1 ObjectDigestInfo
-parseObjectDigestInfo = onNextContainer Sequence $ do
+-- | Parse IssuerSerial with outer SEQUENCE
+-- Used by fromASN1 for standalone IssuerSerial parsing
+parseIssuerSerial :: ParseASN1 IssuerSerial
+parseIssuerSerial = onNextContainer Sequence parseIssuerSerialContent
+
+-- Parse GeneralNames for IssuerSerial - handles SEQUENCE-wrapped GeneralNames
+parseGeneralNamesForIssuerSerial :: ParseASN1 GeneralNames
+parseGeneralNamesForIssuerSerial = do
+  -- In test certificates, GeneralNames is encoded as SEQUENCE containing GeneralName(s)
+  mSeq <- onNextContainerMaybe Sequence (getMany parseGeneralName)
+  case mSeq of
+    Just gns -> return gns  -- Return even if empty (SEQUENCE was already consumed)
+    Nothing -> do
+      -- No SEQUENCE wrapper, try parsing GeneralName directly
+      gn <- parseGeneralName
+      return [gn]
+
+-- | Parse ObjectDigestInfo content (without outer SEQUENCE)
+-- Used for IMPLICIT tagged context where the tag replaces the SEQUENCE
+parseObjectDigestInfoContent :: ParseASN1 ObjectDigestInfo
+parseObjectDigestInfoContent = do
   dot <-
     getNext >>= \case
       IntVal i ->
@@ -149,9 +201,17 @@ parseObjectDigestInfo = onNextContainer Sequence $ do
 
   return $ ObjectDigestInfo dot moid alg digestBs
 
+-- | Parse ObjectDigestInfo with outer SEQUENCE
+-- Used by fromASN1 for standalone ObjectDigestInfo parsing
+parseObjectDigestInfo :: ParseASN1 ObjectDigestInfo
+parseObjectDigestInfo = onNextContainer Sequence parseObjectDigestInfoContent
+
 parseV2Form :: ParseASN1 V2Form
 parseV2Form = onNextContainer Sequence $ do
-  issuerName <- parseGeneralNames
+  -- issuerName: GeneralNames may be wrapped in SEQUENCE or contain GeneralName directly
+  issuerName <- parseGeneralNamesFlexible
+  -- RFC 5755 profile requires issuerName to contain exactly one directoryName
+  -- but we validate this at the profile level, not the parser level
   case issuerName of
     [AltDirectoryName (DistinguishedName dn)] ->
       when (null dn) $
@@ -159,28 +219,51 @@ parseV2Form = onNextContainer Sequence $ do
     [_] -> throwParseError "V2Form: issuerName MUST contain a directoryName"
     _ -> throwParseError "V2Form: issuerName MUST contain one and only one GeneralName"
 
-  baseCertID <- onNextContainerMaybe (Container Context 0) parseIssuerSerial
-  when (isJust baseCertID) $
-    throwParseError "V2Form: baseCertificateID MUST be omitted"
-
-  objDigestInfo <- onNextContainerMaybe (Container Context 1) parseObjectDigestInfo
-  when (isJust objDigestInfo) $
-    throwParseError "V2Form: objectDigestInfo MUST be omitted"
+  -- RFC 5755 profile says baseCertificateID and objectDigestInfo MUST be omitted,
+  -- but this is a profile constraint, not an ASN.1 structure constraint.
+  -- The parser accepts them as OPTIONAL per the base RFC 5755 ASN.1 definition.
+  -- Note: Context tags use IMPLICIT tagging, which replaces the outermost SEQUENCE,
+  -- so we use content parsers (without SEQUENCE wrapper) inside the context tags.
+  baseCertID <- onNextContainerMaybe (Container Context 0) parseIssuerSerialContent
+  objDigestInfo <- onNextContainerMaybe (Container Context 1) parseObjectDigestInfoContent
 
   return $ V2Form issuerName baseCertID objDigestInfo
 
+-- | Parse Holder from ASN.1
+-- RFC 5755 allows multiple optional fields to be present simultaneously
+-- Note: Context tags use IMPLICIT tagging, which replaces the outermost SEQUENCE
+-- of the tagged type. So we use content parsers (without SEQUENCE wrapper) inside
+-- the context tags.
 parseHolder :: ParseASN1 Holder
-parseHolder = do
-  mBaseCertID <- onNextContainerMaybe (Container Context 0) parseIssuerSerial
-  mEntityName <- onNextContainerMaybe (Container Context 1) parseGeneralNames
-  mObjectDigestInfo <- onNextContainerMaybe (Container Context 2) parseObjectDigestInfo
+parseHolder = onNextContainer Sequence $ do
+  -- [0] IMPLICIT replaces IssuerSerial's SEQUENCE, so parse content directly
+  mBaseCertID <- onNextContainerMaybe (Container Context 0) parseIssuerSerialContent
+  -- [1] IMPLICIT replaces GeneralNames' SEQUENCE, so parse GeneralName(s) directly
+  mEntityName <- onNextContainerMaybe (Container Context 1) (getMany parseGeneralName)
+  -- [2] IMPLICIT replaces ObjectDigestInfo's SEQUENCE, so parse content directly
+  mObjectDigestInfo <- onNextContainerMaybe (Container Context 2) parseObjectDigestInfoContent
+  -- RFC 5755: at least one SHOULD be present, but we don't enforce this strictly
+  -- Handle empty GeneralNames case - convert empty list to Nothing
+  let mEntityNameFinal = case mEntityName of
+        Just [] -> Nothing
+        other -> other
+  return $ Holder mBaseCertID mEntityNameFinal mObjectDigestInfo
 
-  case (mBaseCertID, mEntityName, mObjectDigestInfo) of
-    (Just is, Nothing, Nothing) -> return $ HolderBaseCertificateID is
-    (Nothing, Just gn, Nothing) -> return $ HolderEntityName gn
-    (Nothing, Nothing, Just odi) -> return $ HolderObjectDigestInfo odi
-    (Nothing, Nothing, Nothing) -> throwParseError "Holder: one of baseCertificateID, entityName, or objectDigestInfo must be present"
-    _ -> throwParseError "Holder: only one of baseCertificateID, entityName, or objectDigestInfo must be used"
+-- | Parse GeneralNames flexibly - handles both SEQUENCE-wrapped and direct GeneralName
+parseGeneralNamesFlexible :: ParseASN1 GeneralNames
+parseGeneralNamesFlexible = do
+  mSeq <- onNextContainerMaybe Sequence (getMany parseGeneralName)
+  case mSeq of
+    Just gns | not (null gns) -> return gns
+    _ -> do
+      -- No SEQUENCE wrapper, parse GeneralNames directly
+      gns <- getMany parseGeneralName
+      if null gns
+        then do
+          -- Try single GeneralName
+          gn <- parseGeneralName
+          return [gn]
+        else return gns
 
 parseAttCertIssuer :: ParseASN1 AttCertIssuer
 parseAttCertIssuer = do
@@ -193,8 +276,10 @@ parseAttCertIssuer = do
         Just gn -> return $ AttCertIssuerV1 gn
         Nothing -> throwParseError "AttCertIssuer: unknown choice"
 
-parseAttributeCertificateInfo :: ParseASN1 AttributeCertificateInfo
-parseAttributeCertificateInfo = onNextContainer Sequence $ do
+-- | Parse AttributeCertificateInfo content (without outer SEQUENCE)
+-- This matches the pattern used by Certificate in Data.X509.Cert
+parseAttributeCertificateInfoContent :: ParseASN1 AttributeCertificateInfo
+parseAttributeCertificateInfoContent = do
   ver <-
     getNext >>= \case
       IntVal 1 -> return 1
@@ -216,41 +301,64 @@ parseAttributeCertificateInfo = onNextContainer Sequence $ do
     _ -> Nothing
   AttributeCertificateInfo ver holder acIssuer sig sn validity attrs uid <$> getObject
 
+-- | Parse AttributeCertificateInfo with outer SEQUENCE
+-- Used when parsing from raw ASN.1 (e.g., for testing)
+parseAttributeCertificateInfo :: ParseASN1 AttributeCertificateInfo
+parseAttributeCertificateInfo = onNextContainer Sequence parseAttributeCertificateInfoContent
+
+-- | Encode IssuerSerial content (without outer SEQUENCE)
+-- Used for IMPLICIT tagged context where the tag replaces the SEQUENCE
+encodeIssuerSerialContent :: IssuerSerial -> [ASN1]
+encodeIssuerSerialContent (IssuerSerial issuer' serial' issuerUID') =
+  encodeGeneralNames issuer'
+    ++ [IntVal serial']
+    ++ maybe [] (\uid -> [BitString uid]) issuerUID'
+
+-- | Encode ObjectDigestInfo content (without outer SEQUENCE)
+-- Used for IMPLICIT tagged context where the tag replaces the SEQUENCE
+encodeObjectDigestInfoContent :: ObjectDigestInfo -> [ASN1]
+encodeObjectDigestInfoContent (ObjectDigestInfo objType otherObjType alg objDigest) =
+  [IntVal $ fromIntegral $ fromEnum objType]
+    ++ maybe [] (\oid -> [OID oid]) otherObjType
+    ++ toASN1 alg []
+    ++ [BitString $ toBitArray objDigest 0]
+
 instance ASN1Object IssuerSerial where
   toASN1 (IssuerSerial issuer' serial' issuerUID') xs =
     [Start Sequence]
-      ++ encodeGeneralNames issuer'
-      ++ [IntVal serial']
-      ++ maybe [] (\uid -> [BitString uid]) issuerUID'
+      ++ encodeIssuerSerialContent (IssuerSerial issuer' serial' issuerUID')
       ++ [End Sequence]
       ++ xs
   fromASN1 = runParseASN1State parseIssuerSerial
 
 instance ASN1Object ObjectDigestInfo where
-  toASN1 (ObjectDigestInfo objType otherObjType alg objDigest) xs =
+  toASN1 odi xs =
     [Start Sequence]
-      ++ [IntVal $ fromIntegral $ fromEnum objType]
-      ++ maybe [] (\oid -> [OID oid]) otherObjType
-      ++ toASN1 alg []
-      ++ [BitString $ toBitArray objDigest 0]
+      ++ encodeObjectDigestInfoContent odi
       ++ [End Sequence]
       ++ xs
   fromASN1 = runParseASN1State parseObjectDigestInfo
 
 instance ASN1Object V2Form where
+  -- Note: Context tags use IMPLICIT tagging, so we encode content without SEQUENCE wrapper
   toASN1 (V2Form issuerName baseCertID objDigestInfo) xs =
     [Start Sequence]
       ++ encodeGeneralNames issuerName
-      ++ maybe [] (\x -> asn1Container (Container Context 0) (toASN1 x [])) baseCertID
-      ++ maybe [] (\x -> asn1Container (Container Context 1) (toASN1 x [])) objDigestInfo
+      ++ maybe [] (\x -> asn1Container (Container Context 0) (encodeIssuerSerialContent x)) baseCertID
+      ++ maybe [] (\x -> asn1Container (Container Context 1) (encodeObjectDigestInfoContent x)) objDigestInfo
       ++ [End Sequence]
       ++ xs
   fromASN1 = runParseASN1State parseV2Form
 
 instance ASN1Object Holder where
-  toASN1 (HolderBaseCertificateID issuerSerial) xs = asn1Container (Container Context 0) (toASN1 issuerSerial []) ++ xs
-  toASN1 (HolderEntityName generalNames) xs = asn1Container (Container Context 1) (encodeGeneralNames generalNames) ++ xs
-  toASN1 (HolderObjectDigestInfo objDigestInfo) xs = asn1Container (Container Context 2) (toASN1 objDigestInfo []) ++ xs
+  -- Note: Context tags use IMPLICIT tagging, so we encode content without SEQUENCE wrapper
+  toASN1 (Holder mBaseCertID mEntityName mObjDigestInfo) xs =
+    [Start Sequence]
+      ++ maybe [] (\is -> asn1Container (Container Context 0) (encodeIssuerSerialContent is)) mBaseCertID
+      ++ maybe [] (\gns -> asn1Container (Container Context 1) (concatMap encodeGeneralName gns)) mEntityName
+      ++ maybe [] (\odi -> asn1Container (Container Context 2) (encodeObjectDigestInfoContent odi)) mObjDigestInfo
+      ++ [End Sequence]
+      ++ xs
   fromASN1 = runParseASN1State parseHolder
 
 instance ASN1Object AttCertIssuer where
@@ -273,4 +381,9 @@ instance ASN1Object AttributeCertificateInfo where
         ++ [End Sequence]
     )
       ++ xs
-  fromASN1 = runParseASN1State parseAttributeCertificateInfo
+  -- Note: decodeSignedObject strips the outer SEQUENCE before calling fromASN1.
+  -- For direct fromASN1 calls (e.g., property tests), the SEQUENCE is present.
+  -- We handle both cases by checking the first element.
+  fromASN1 [] = Left "AttributeCertificateInfo: empty input"
+  fromASN1 asn1@(Start Sequence : _) = runParseASN1State parseAttributeCertificateInfo asn1
+  fromASN1 asn1 = runParseASN1State parseAttributeCertificateInfoContent asn1

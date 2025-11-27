@@ -45,7 +45,9 @@ module Data.X509.Attribute
     SecurityCategory (..),
     GeneralName,
     encodeGeneralNames,
+    encodeGeneralName,
     parseGeneralNames,
+    parseGeneralName,
 
     -- * OIDs
     oid_Role,

@@ -53,13 +53,14 @@ library
   exposed-modules:
       Data.X509.TCG.OID
     , Data.X509.TCG.Platform
-    , Data.X509.TCG.Component  
+    , Data.X509.TCG.Component
     , Data.X509.TCG.Delta
     , Data.X509.TCG.Attributes
     , Data.X509.TCG.Operations
     , Data.X509.TCG.Validation
     , Data.X509.TCG.Utils
     , Data.X509.TCG
+    , Data.X509.TCG.Certification
 
   hs-source-dirs: .
 

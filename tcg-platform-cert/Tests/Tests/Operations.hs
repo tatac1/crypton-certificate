@@ -1,3 +1,5 @@
+{-# LANGUAGE PatternSynonyms #-}
+
 module Tests.Operations (tests) where
 
 import Data.ASN1.Types (ASN1 (..))
@@ -9,7 +11,7 @@ import Control.Monad (when)
 import Data.Maybe (isNothing)
 import Data.Hourglass (Date (..), DateTime (..), Month (..), TimeOfDay (..))
 import Data.X509 (Certificate (..), DistinguishedName (..), Extensions (..), HashALG (..), PubKey (..), PubKeyALG (..), SignatureALG (..))
-import Data.X509.AttCert (AttCertIssuer (..), AttCertValidityPeriod (..), Holder (..))
+import Data.X509.AttCert (AttCertIssuer (..), AttCertValidityPeriod (..), Holder (..), pattern HolderEntityName)
 import Data.X509.Attribute (Attributes (..))
 import qualified Data.X509.TCG as TCG
 import Data.X509.TCG.Component
