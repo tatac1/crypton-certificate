@@ -12,9 +12,9 @@ tests = testGroup "TCG OID Tests"
     ]
   , testGroup "Platform Attribute OIDs"
     [ testCase "tcg_at_platformConfiguration" $
-        tcg_at_platformConfiguration @?= [2, 23, 133, 2, 1]
+        tcg_at_platformConfiguration @?= [2, 23, 133, 5, 1, 7, 1]
     , testCase "tcg_at_platformConfiguration_v2" $
-        tcg_at_platformConfiguration_v2 @?= [2, 23, 133, 2, 23]
+        tcg_at_platformConfiguration_v2 @?= [2, 23, 133, 5, 1, 7, 2]
     , testCase "tcg_at_componentIdentifier" $
         tcg_at_componentIdentifier @?= [2, 23, 133, 2, 2]
     , testCase "tcg_at_componentIdentifier_v2" $
@@ -34,7 +34,7 @@ tests = testGroup "TCG OID Tests"
     , testCase "tcg_kp_PlatformAttributeCertificate" $
         tcg_kp_PlatformAttributeCertificate @?= [2, 23, 133, 8, 2]
     , testCase "tcg_kp_DeltaAttributeCertificate" $
-        tcg_kp_DeltaAttributeCertificate @?= [2, 23, 133, 8, 3]
+        tcg_kp_DeltaAttributeCertificate @?= [2, 23, 133, 8, 5]
     ]
   ]
 

@@ -102,9 +102,6 @@ module Data.X509.TCG.OID
     tcg_class_bluetooth,
     tcg_class_wifi,
     tcg_class_ethernet,
-    tcg_class_usb,
-    tcg_class_firewire,
-    tcg_class_scsi,
     tcg_class_ide
   ) where
 
@@ -121,15 +118,16 @@ tcg_paa = tcgOID ++ [5, 1]
 -- * TCG Attribute Type OIDs (tcg-at arc: 2.23.133.2.*)
 
 -- | Platform Configuration attribute OID (v1)
--- OID: 2.23.133.2.1
+-- OID: 2.23.133.5.1.7.1 (tcg-at-platformConfiguration-v1 in spec)
+-- This is defined as {tcg-at-platformConfiguration 1} where tcg-at-platformConfiguration = {tcg-common 7}
 tcg_at_platformConfiguration :: OID
-tcg_at_platformConfiguration = tcgOID ++ [2, 1]
+tcg_at_platformConfiguration = tcg_paa ++ [7, 1]
 
--- | Platform Configuration attribute OID (v2) - in tcg-at arc
--- OID: 2.23.133.2.2
--- Note: This is different from tcg_paa_platformConfiguration_v2 which is 2.23.133.5.1.7.2
+-- | Platform Configuration attribute OID (v2) - per TCG spec IWG v1.1
+-- OID: 2.23.133.5.1.7.2 (tcg-at-platformConfiguration-v2 in spec)
+-- This is defined as {tcg-at-platformConfiguration 2} where tcg-at-platformConfiguration = {tcg-common 7}
 tcg_at_platformConfiguration_v2 :: OID
-tcg_at_platformConfiguration_v2 = tcgOID ++ [2, 2]
+tcg_at_platformConfiguration_v2 = tcg_paa ++ [7, 2]
 
 -- | Component Identifier attribute OID (v1)
 -- OID: 2.23.133.2.2
@@ -224,9 +222,9 @@ tcg_kp_PlatformAttributeCertificate :: OID
 tcg_kp_PlatformAttributeCertificate = tcgOID ++ [8, 2]
 
 -- | Delta Attribute Certificate key purpose OID
--- OID: 2.23.133.8.3
+-- OID: 2.23.133.8.5 (tcg-kp-DeltaPlatformAttributeCertificate per IWG v1.1 Section 3.2.2)
 tcg_kp_DeltaAttributeCertificate :: OID
-tcg_kp_DeltaAttributeCertificate = tcgOID ++ [8, 3]
+tcg_kp_DeltaAttributeCertificate = tcgOID ++ [8, 5]
 
 -- | Component Identifier Certificate key purpose OID
 -- OID: 2.23.133.8.4
@@ -352,25 +350,15 @@ tcg_class_wifi = tcgOID ++ [18, 2, 2]
 tcg_class_ethernet :: OID
 tcg_class_ethernet = tcgOID ++ [18, 2, 3]
 
--- | USB component class  
--- OID: 2.23.133.18.3.1
-tcg_class_usb :: OID
-tcg_class_usb = tcgOID ++ [18, 3, 1]
-
--- | FireWire component class
--- OID: 2.23.133.18.3.2
-tcg_class_firewire :: OID
-tcg_class_firewire = tcgOID ++ [18, 3, 2]
-
--- | SCSI component class
--- OID: 2.23.133.18.3.3
-tcg_class_scsi :: OID
-tcg_class_scsi = tcgOID ++ [18, 3, 3]
-
 -- | IDE component class
--- OID: 2.23.133.18.3.4
+-- OID: 2.23.133.18.4.1 (moved from 18.3.* arc to avoid collision with registry OIDs)
 tcg_class_ide :: OID
-tcg_class_ide = tcgOID ++ [18, 3, 4]
+tcg_class_ide = tcgOID ++ [18, 4, 1]
+
+-- Note: tcg_class_usb, tcg_class_firewire, tcg_class_scsi were removed
+-- because they collided with tcg_registry_componentClass_* OIDs at 2.23.133.18.3.*
+-- Per TCG Component Class Registry v1.0, ComponentClass uses 4-byte OCTET STRING values,
+-- not OIDs. Interface-specific component classes should be represented differently.
 
 -- * Extended Platform Attribute OID Definitions (IWG v1.1)
 
@@ -420,9 +408,9 @@ tcg_at_policyReference :: OID
 tcg_at_policyReference = tcgOID ++ [2, 28]
 
 -- | TCG Credential Type attribute
--- OID: 2.23.133.2.17
+-- OID: 2.23.133.2.25 (tcg-at-tcgCredentialType per IWG v1.1 Section 3.1.2)
 tcg_at_tcgCredentialType :: OID
-tcg_at_tcgCredentialType = tcgOID ++ [2, 17]
+tcg_at_tcgCredentialType = tcgOID ++ [2, 25]
 
 -- | TBB Security Assertions attribute
 -- OID: 2.23.133.2.19
