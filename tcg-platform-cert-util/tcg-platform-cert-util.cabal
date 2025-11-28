@@ -1,12 +1,25 @@
 Name:                tcg-platform-cert-util
 Version:             1.0.0
-Description:         Command-line utility for TCG Platform Certificates and Delta Platform Certificates
+Synopsis:            Command-line utility for TCG Platform Certificates
+Description:
+    This package provides a command-line utility for working with TCG (Trusted
+    Computing Group) Platform Certificates and Delta Platform Certificates.
+    .
+    Features include:
+    .
+    * Display certificate details in human-readable format
+    * List platform components and their properties
+    * Validate certificates against issuer certificates
+    * Parse and display ASN.1 structures
+    * OID lookup and display with human-readable names
+    .
+    The utility supports both PEM and DER encoded certificates and follows
+    the IWG Platform Certificate Profile v1.1 specification.
 License:             BSD3
 License-file:        LICENSE
 Copyright:           Toru Tomita <toru.tomita@gmail.com>
 Author:              Toru Tomita <toru.tomita@gmail.com>
 Maintainer:          Toru Tomita <toru.tomita@gmail.com>
-Synopsis:            Utility for TCG Platform Certificates
 Build-Type:          Simple
 Category:            Security
 Stability:           experimental

@@ -1,12 +1,26 @@
 Name:                crypton-x509-ac-validation
 version:             0.1.0
-Description:         RFC 5755 Attribute Certificate and TCG Platform Certificate validation
+Synopsis:            Attribute Certificate validation for RFC 5755 and TCG profiles
+Description:
+    This library provides validation functions for X.509 Attribute Certificates
+    as defined in RFC 5755 and TCG Platform Certificates.
+    .
+    Features include:
+    .
+    * Signature verification for Attribute Certificates
+    * Validity period checking (notBefore/notAfter)
+    * Issuer certificate chain validation
+    * Revocation checking via Attribute Certificate Revocation Lists (ACRLs)
+    * RFC 5755 profile compliance validation
+    * TCG Platform Certificate profile validation
+    .
+    The library integrates with crypton-x509-validation for PKI operations
+    and follows the security requirements of RFC 5755 Section 5.
 License:             BSD3
 License-file:        LICENSE
 Copyright:           Vincent Hanquez <vincent@snarc.org>
 Author:              Toru Tomita <toru.tomita@gmail.com>
 Maintainer:          Toru Tomita <toru.tomita@gmail.com>
-Synopsis:            Attribute Certificate validation for RFC 5755 and TCG profiles
 Build-Type:          Simple
 Category:            Data
 stability:           experimental
