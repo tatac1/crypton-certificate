@@ -43,6 +43,13 @@ configLoadingTests = testGroup "Configuration Loading"
               , pccMinorVersion = Nothing
               , pccPatchVersion = Nothing
               , pccPlatformQualifier = Nothing
+              , pccCredentialSpecMajor = Nothing
+              , pccCredentialSpecMinor = Nothing
+              , pccCredentialSpecRevision = Nothing
+              , pccPlatformSpecMajor = Nothing
+              , pccPlatformSpecMinor = Nothing
+              , pccPlatformSpecRevision = Nothing
+              , pccSecurityAssertions = Nothing
               }
         encodeFile path config
         result <- loadConfig path
@@ -101,24 +108,36 @@ yamlSerializationTests = testGroup "YAML Serialization"
             , pccSerial = "Serial"
             , pccValidityDays = Just 365
             , pccKeySize = Just 2048
-            , pccComponents = 
+            , pccComponents =
                 [ ComponentConfig
                     { ccClass = "00030003"
                     , ccManufacturer = "Component Corp"
                     , ccModel = "Component Model"
-                    , ccSerial = "COMP001"
-                    , ccRevision = "1.0"
+                    , ccSerial = Just "COMP001"
+                    , ccRevision = Just "1.0"
+                    , ccAddresses = Nothing
                     }
                 ]
-            , pccPlatformConfigUri = Just "https://example.com/config"
+            , pccPlatformConfigUri = Just URIReferenceConfig
+                { uriUri = "https://example.com/config"
+                , uriHashAlgorithm = Nothing
+                , uriHashValue = Nothing
+                }
             , pccPlatformClass = Just "00000001"
             , pccSpecificationVersion = Just "1.1"
             , pccMajorVersion = Just 1
             , pccMinorVersion = Just 0
             , pccPatchVersion = Just 0
             , pccPlatformQualifier = Just "Enterprise"
+            , pccCredentialSpecMajor = Nothing
+            , pccCredentialSpecMinor = Nothing
+            , pccCredentialSpecRevision = Nothing
+            , pccPlatformSpecMajor = Nothing
+            , pccPlatformSpecMinor = Nothing
+            , pccPlatformSpecRevision = Nothing
+            , pccSecurityAssertions = Nothing
             }
-      
+
       withSystemTempFile "roundtrip-test.yaml" $ \path _handle -> do
         encodeFile path originalConfig
         result <- decodeFileEither path
@@ -149,8 +168,9 @@ componentConversionTests = testGroup "Component Conversion"
             { ccClass = "00030003"
             , ccManufacturer = "Test Manufacturer"
             , ccModel = "Test Model"
-            , ccSerial = "TEST001"
-            , ccRevision = "1.0"
+            , ccSerial = Just "TEST001"
+            , ccRevision = Just "1.0"
+            , ccAddresses = Nothing
             }
       
       let componentId = yamlComponentToComponentIdentifier yamlComponent
@@ -174,8 +194,9 @@ propertyTests = testGroup "Property Tests"
             { ccClass = "00000000"
             , ccManufacturer = manufacturer
             , ccModel = model
-            , ccSerial = serial
-            , ccRevision = revision
+            , ccSerial = Just serial
+            , ccRevision = Just revision
+            , ccAddresses = Nothing
             }
           compId = yamlComponentToComponentIdentifier yamlComp
       in ciManufacturer compId == BC.pack manufacturer &&
@@ -199,6 +220,13 @@ propertyTests = testGroup "Property Tests"
             , pccMinorVersion = Nothing
             , pccPatchVersion = Nothing
             , pccPlatformQualifier = Nothing
+            , pccCredentialSpecMajor = Nothing
+            , pccCredentialSpecMinor = Nothing
+            , pccCredentialSpecRevision = Nothing
+            , pccPlatformSpecMajor = Nothing
+            , pccPlatformSpecMinor = Nothing
+            , pccPlatformSpecRevision = Nothing
+            , pccSecurityAssertions = Nothing
             }
       in pccManufacturer config == manufacturer &&
          pccModel config == model &&

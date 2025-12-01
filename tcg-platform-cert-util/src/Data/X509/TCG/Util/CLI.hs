@@ -92,7 +92,7 @@ doGenerate opts _ = do
   let configFile = extractOpt "config" (\case ConfigFile f -> Just f; _ -> Nothing) opts ""
 
   -- Load configuration from YAML file or command line options
-  (manufacturer, model, version, serial, _keySize, _validityDays, components) <-
+  (manufacturer, model, version, serial, _keySize, _validityDays, components, mExtAttrs) <-
     if null configFile
       then do
         -- Use command line options
@@ -102,7 +102,7 @@ doGenerate opts _ = do
             serial = extractOpt "serial" (\case Serial s -> Just s; _ -> Nothing) opts "0001"
             keySize = extractOpt "key-size" (\case KeySize k -> Just (show k); _ -> Nothing) opts "2048"
             validityDays = extractOpt "validity" (\case ValidityDays d -> Just (show d); _ -> Nothing) opts "365"
-        return (manufacturer, model, version, serial, keySize, validityDays, [])
+        return (manufacturer, model, version, serial, keySize, validityDays, [], Nothing)
       else do
         -- Load from YAML config file
         putStrLn $ "Loading configuration from: " ++ configFile
@@ -114,6 +114,9 @@ doGenerate opts _ = do
           Right config -> do
             let keySize = show $ fromMaybe 2048 (pccKeySize config)
                 validityDays = show $ fromMaybe 365 (pccValidityDays config)
+                -- Extract extended TCG attributes from config
+                extAttrs = configToExtendedAttrs config
+            putStrLn "  Extended TCG attributes loaded from config file"
             return
               ( pccManufacturer config,
                 pccModel config,
@@ -121,7 +124,8 @@ doGenerate opts _ = do
                 pccSerial config,
                 keySize,
                 validityDays,
-                pccComponents config
+                pccComponents config,
+                Just extAttrs
               )
 
   -- Extract remaining options
@@ -234,7 +238,14 @@ doGenerate opts _ = do
 
                           -- Generate certificate with real signature, components, and EK cert
                           putStrLn $ "Using hash algorithm: " ++ hashAlg
-                          result <- createSignedPlatformCertificate platformConfig componentIdentifiers tpmInfo caPrivKey caCert ekCert hashAlg
+                          -- Use extended attributes if available (from config file)
+                          result <- case mExtAttrs of
+                            Just extAttrs -> do
+                              putStrLn "  Using extended TCG attributes for IWG v1.1 compliance"
+                              createSignedPlatformCertificateExt platformConfig componentIdentifiers tpmInfo caPrivKey caCert ekCert hashAlg extAttrs
+                            Nothing -> do
+                              putStrLn "  Using default TCG attributes"
+                              createSignedPlatformCertificate platformConfig componentIdentifiers tpmInfo caPrivKey caCert ekCert hashAlg
                           case result of
                             Right cert -> do
                               putStrLn $ "Certificate generated successfully with real signature and EK certificate binding"

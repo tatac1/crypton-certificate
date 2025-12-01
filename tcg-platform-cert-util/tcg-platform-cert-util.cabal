@@ -37,6 +37,8 @@ Library
                    , Data.X509.TCG.Util.CLI
                    , Data.X509.TCG.Util.OID
   Build-depends:     base >= 4 && < 5
+                   , aeson
+                   , base64-bytestring
                    , bytestring
                    , containers
                    , directory
@@ -68,6 +70,8 @@ Executable           tcg-platform-cert-util
                    , Data.X509.TCG.Util.OID
   Buildable:         True
   Build-depends:     base >= 4 && < 5
+                   , aeson
+                   , base64-bytestring
                    , bytestring
                    , containers
                    , directory
