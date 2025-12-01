@@ -41,13 +41,14 @@ configToASN1Tests = testGroup "Configuration to ASN.1 Workflow"
               , pccSerial = "INT001"
               , pccValidityDays = Just 365
               , pccKeySize = Just 2048
-              , pccComponents = 
+              , pccComponents =
                   [ ComponentConfig
                       { ccClass = "00030003"
                       , ccManufacturer = "Component Corp"
                       , ccModel = "Component Model"
-                      , ccSerial = "COMP001"
-                      , ccRevision = "1.0"
+                      , ccSerial = Just "COMP001"
+                      , ccRevision = Just "1.0"
+                      , ccAddresses = Nothing
                       }
                   ]
               , pccPlatformConfigUri = Nothing
@@ -57,6 +58,13 @@ configToASN1Tests = testGroup "Configuration to ASN.1 Workflow"
               , pccMinorVersion = Nothing
               , pccPatchVersion = Nothing
               , pccPlatformQualifier = Nothing
+              , pccCredentialSpecMajor = Nothing
+              , pccCredentialSpecMinor = Nothing
+              , pccCredentialSpecRevision = Nothing
+              , pccPlatformSpecMajor = Nothing
+              , pccPlatformSpecMinor = Nothing
+              , pccPlatformSpecRevision = Nothing
+              , pccSecurityAssertions = Nothing
               }
 
         -- Save config to file
@@ -102,15 +110,26 @@ certificateWorkflowTests = testGroup "Certificate Workflow"
             , pccValidityDays = Just 730
             , pccKeySize = Just 2048
             , pccComponents = []
-            , pccPlatformConfigUri = Just "https://example.com/workflow"
+            , pccPlatformConfigUri = Just URIReferenceConfig
+                { uriUri = "https://example.com/workflow"
+                , uriHashAlgorithm = Nothing
+                , uriHashValue = Nothing
+                }
             , pccPlatformClass = Just "00000002"
             , pccSpecificationVersion = Just "1.2"
             , pccMajorVersion = Just 1
             , pccMinorVersion = Just 5
             , pccPatchVersion = Just 0
             , pccPlatformQualifier = Just "Production"
+            , pccCredentialSpecMajor = Nothing
+            , pccCredentialSpecMinor = Nothing
+            , pccCredentialSpecRevision = Nothing
+            , pccPlatformSpecMajor = Nothing
+            , pccPlatformSpecMinor = Nothing
+            , pccPlatformSpecRevision = Nothing
+            , pccSecurityAssertions = Nothing
             }
-      
+
       -- Create platform configuration (this would normally create keys/certificates)
       -- For now we just verify the configuration is valid
       pccManufacturer config @?= "Workflow Test Corp"
@@ -126,8 +145,9 @@ certificateWorkflowTests = testGroup "Certificate Workflow"
             { ccClass = "00040004"
             , ccManufacturer = "Workflow Component Corp"
             , ccModel = "Workflow Component"
-            , ccSerial = "WC001"
-            , ccRevision = "2.0"
+            , ccSerial = Just "WC001"
+            , ccRevision = Just "2.0"
+            , ccAddresses = Nothing
             }
       
       let componentId = yamlComponentToComponentIdentifier componentConfig
@@ -237,8 +257,15 @@ errorHandlingTests = testGroup "Error Handling"
               , pccMinorVersion = Nothing
               , pccPatchVersion = Nothing
               , pccPlatformQualifier = Nothing
+              , pccCredentialSpecMajor = Nothing
+              , pccCredentialSpecMinor = Nothing
+              , pccCredentialSpecRevision = Nothing
+              , pccPlatformSpecMajor = Nothing
+              , pccPlatformSpecMinor = Nothing
+              , pccPlatformSpecRevision = Nothing
+              , pccSecurityAssertions = Nothing
               }
-        
+
         encodeFile path config
         result <- loadConfig path
         case result of

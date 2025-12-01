@@ -110,6 +110,15 @@ module Data.X509.TCG
     isDeltaCertificate,
     getRequiredAttributes,
     validateAttributeCompliance,
+
+    -- * Extended TCG Attributes (IWG v1.1)
+    ExtendedTCGAttributes (..),
+    PlatformConfigUri (..),
+    TBBSecurityAssertions (..),
+    ComponentConfigV2 (..),
+    defaultExtendedTCGAttributes,
+    buildAttributesFromConfigExt,
+    mkPlatformCertificateExt,
   )
 where
 
@@ -129,12 +138,13 @@ import Data.ASN1.BinaryEncoding (DER (..))
 import Data.ASN1.Encoding (encodeASN1')
 import Data.ASN1.Types
 import Data.ASN1.Types.String ()
+import Data.ASN1.BitArray (toBitArray)
 import Data.ByteArray (convert)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as B8
 import Data.Hourglass (Date (..), DateTime (..), Month (..), TimeOfDay (..))
-import Data.X509 (Certificate (..), DistinguishedName (..), Extensions (..), HashALG (..), PubKeyALG (..), SignatureALG (..), objectToSignedExact, objectToSignedExactF, AltName(..))
-import Data.X509.AttCert (AttCertIssuer (..), AttCertValidityPeriod (..), V2Form (..), ObjectDigestInfo (..), DigestedObjectType (..), pattern HolderObjectDigestInfo)
+import Data.X509 (Certificate (..), DistinguishedName (..), Extensions (..), HashALG (..), PubKeyALG (..), SignatureALG (..), objectToSignedExact, objectToSignedExactF, AltName(..), certIssuerDN, certSerial)
+import Data.X509.AttCert (AttCertIssuer (..), AttCertValidityPeriod (..), V2Form (..), Holder (..), IssuerSerial (..))
 import Data.X509.Attribute (Attribute (..), Attributes (..))
 import Data.X509.TCG.Attributes
 import Data.X509.TCG.Component
@@ -364,31 +374,25 @@ buildPlatformCertificateInfoWithValidity ::
   Certificate -> -- TPM EK Certificate
   String -> -- Hash algorithm ("sha256", "sha384", "sha512")
   Either String PlatformCertificateInfo
-buildPlatformCertificateInfoWithValidity config components tpmInfo validity ekCert hashAlg =
-  -- Create holder referencing TPM EK certificate (secure by default)
-  -- Use ObjectDigestInfo with public key hash to prevent CA name collision attacks
-  let pubKeyBytes = encodeASN1' DER $ toASN1 (certPubKey ekCert) []
-      (pubKeyHash, hashALG) = case hashAlg of
-        "sha256" -> (convert $ hashWith SHA256 pubKeyBytes, HashSHA256)
-        "sha384" -> (convert $ hashWith SHA384 pubKeyBytes, HashSHA384)  
-        "sha512" -> (convert $ hashWith SHA512 pubKeyBytes, HashSHA512)
-        _        -> (convert $ hashWith SHA384 pubKeyBytes, HashSHA384)  -- Default to SHA384
-      objectDigestInfo = ObjectDigestInfo 
-        { odiObjectType = OIDPublicKeyCert  -- Reference to the public key certificate
-        , odiOtherObjectTypeID = Nothing    -- Not needed for publicKeyCert type
-        , odiDigestAlgorithm = SignatureALG hashALG PubKeyALG_RSA  -- Hash algorithm used
-        , odiObjectDigest = pubKeyHash      -- Configurable hash of the EK certificate's public key
-        }
-      holder = HolderObjectDigestInfo objectDigestInfo
+buildPlatformCertificateInfoWithValidity config components tpmInfo validity ekCert _hashAlg =
+  -- Create holder referencing TPM EK certificate using baseCertificateID
+  -- Per TCG Platform Certificate Profile v1.1:
+  -- "The Holder field SHALL contain a baseCertificateID that references the TPM's Endorsement Key Certificate"
+  let ekIssuerDN = certIssuerDN ekCert       -- EK Certificate's issuer DN
+      ekSerialNum = certSerial ekCert         -- EK Certificate's serial number
+      -- Create IssuerSerial referencing the EK Certificate
+      issuerSerial = IssuerSerial [AltDirectoryName ekIssuerDN] ekSerialNum Nothing
+      -- Create Holder with baseCertificateID
+      holder = Holder (Just issuerSerial) Nothing Nothing
 
       -- Create a simple issuer (V2 form) with proper issuer name
       -- RFC 5755 requires exactly one GeneralName in issuerName, and it must be a directoryName
-      cnOid = [2, 5, 4, 3] -- Common Name OID  
+      cnOid = [2, 5, 4, 3] -- Common Name OID
       ouOid = [2, 5, 4, 11] -- Organization Unit OID
       oOid = [2, 5, 4, 10]  -- Organization OID
-      issuerDN = DistinguishedName 
+      issuerDN = DistinguishedName
         [ (cnOid, ASN1CharacterString UTF8 (B8.pack "TCG Platform Certificate Issuer"))
-        , (ouOid, ASN1CharacterString UTF8 (B8.pack "Platform Certificate Authority")) 
+        , (ouOid, ASN1CharacterString UTF8 (B8.pack "Platform Certificate Authority"))
         , (oOid, ASN1CharacterString UTF8 (B8.pack "TCG Organization"))
         ]
       acIssuer = AttCertIssuerV2 (V2Form [AltDirectoryName issuerDN] Nothing Nothing)
@@ -409,14 +413,64 @@ buildPlatformCertificateInfoWithValidity config components tpmInfo validity ekCe
              pciExtensions = Extensions Nothing
            }
 
+-- | Helper function to build PlatformCertificateInfo with extended TCG attributes
+-- This version supports additional TCG Platform Certificate Profile v1.1 attributes
+buildPlatformCertificateInfoWithValidityExt ::
+  PlatformConfiguration ->
+  [ComponentIdentifier] ->
+  TPMInfo ->
+  AttCertValidityPeriod ->
+  Certificate -> -- TPM EK Certificate
+  String -> -- Hash algorithm ("sha256", "sha384", "sha512")
+  ExtendedTCGAttributes -> -- Extended TCG attributes
+  Either String PlatformCertificateInfo
+buildPlatformCertificateInfoWithValidityExt config components tpmInfo validity ekCert _hashAlg extAttrs =
+  -- Create holder referencing TPM EK certificate using baseCertificateID
+  -- Per TCG Platform Certificate Profile v1.1:
+  -- "The Holder field SHALL contain a baseCertificateID that references the TPM's Endorsement Key Certificate"
+  let ekIssuerDN = certIssuerDN ekCert       -- EK Certificate's issuer DN
+      ekSerialNum = certSerial ekCert         -- EK Certificate's serial number
+      -- Create IssuerSerial referencing the EK Certificate
+      issuerSerial = IssuerSerial [AltDirectoryName ekIssuerDN] ekSerialNum Nothing
+      -- Create Holder with baseCertificateID
+      holder = Holder (Just issuerSerial) Nothing Nothing
+
+      cnOid = [2, 5, 4, 3]
+      ouOid = [2, 5, 4, 11]
+      oOid = [2, 5, 4, 10]
+      issuerDN = DistinguishedName
+        [ (cnOid, ASN1CharacterString UTF8 (B8.pack "TCG Platform Certificate Issuer"))
+        , (ouOid, ASN1CharacterString UTF8 (B8.pack "Platform Certificate Authority"))
+        , (oOid, ASN1CharacterString UTF8 (B8.pack "TCG Organization"))
+        ]
+      acIssuer = AttCertIssuerV2 (V2Form [AltDirectoryName issuerDN] Nothing Nothing)
+
+  -- Create attributes from config, components, TPM info, and extended attributes
+  in case buildAttributesFromConfigExt config components tpmInfo extAttrs of
+       Left err -> Left err
+       Right attrs -> Right $
+         PlatformCertificateInfo
+           { pciVersion = 2,
+             pciHolder = holder,
+             pciIssuer = acIssuer,
+             pciSignature = SignatureALG HashSHA384 PubKeyALG_RSA,
+             pciSerialNumber = 1,
+             pciValidity = validity,
+             pciAttributes = attrs,
+             pciIssuerUniqueID = Nothing,
+             pciExtensions = Extensions Nothing
+           }
+
 -- | Convert all ComponentIdentifiers to a single componentIdentifier_v2 attribute
+-- Note: This is the legacy function that uses simple OCTET STRING encoding.
+-- For TCG v1.1 compliant platformConfiguration-v2 format, use buildPlatformConfigurationV2Attr instead.
 componentsToAttribute :: [ComponentIdentifier] -> [Attribute]
 componentsToAttribute [] = []
 componentsToAttribute components =
   [Attribute tcg_at_componentIdentifier_v2 [componentListToASN1 components]]
   where
     componentListToASN1 comps = [Start Sequence] ++ concatMap componentToASN1 comps ++ [End Sequence]
-    componentToASN1 comp = 
+    componentToASN1 comp =
       [Start Sequence,
        OctetString (ciManufacturer comp),
        OctetString (ciModel comp)] ++
@@ -428,23 +482,343 @@ componentsToAttribute components =
          Nothing -> [Null]) ++
       [End Sequence]
 
+-- | Encode ComponentClass as SEQUENCE { OID, 4-byte value }
+-- Per TCG Platform Certificate Profile v1.1:
+-- ComponentClass ::= SEQUENCE {
+--   componentClassRegistry OBJECT IDENTIFIER,  -- 2.23.133.18.3.1
+--   componentClassValue    OCTET STRING (SIZE(4))
+-- }
+encodeComponentClass :: B.ByteString -> [ASN1]
+encodeComponentClass classValue =
+  [ Start Sequence
+  , OID tcg_registry_componentClass_tcg  -- 2.23.133.18.3.1
+  , OctetString classValue               -- 4-byte class value
+  , End Sequence
+  ]
+
+-- | Encode a single ComponentIdentifierV2 per TCG Platform Certificate Profile v1.1
+-- ComponentIdentifierV2 ::= SEQUENCE {
+--   componentClass     ComponentClass,
+--   componentManufacturer UTF8String,
+--   componentModel     UTF8String,
+--   componentSerial    [0] IMPLICIT UTF8String OPTIONAL,
+--   componentRevision  [1] IMPLICIT UTF8String OPTIONAL,
+--   componentAddresses [4] IMPLICIT ComponentAddresses OPTIONAL
+-- }
+encodeComponentIdentifierV2 :: ComponentConfigV2 -> [ASN1]
+encodeComponentIdentifierV2 comp =
+  [ Start Sequence ] ++
+  encodeComponentClass (ccv2Class comp) ++
+  [ ASN1String (ASN1CharacterString UTF8 (ccv2Manufacturer comp))
+  , ASN1String (ASN1CharacterString UTF8 (ccv2Model comp)) ] ++
+  (case ccv2Serial comp of
+    Just s -> [Other Context 0 s]  -- [0] IMPLICIT UTF8String
+    Nothing -> []) ++
+  (case ccv2Revision comp of
+    Just r -> [Other Context 1 r]  -- [1] IMPLICIT UTF8String
+    Nothing -> []) ++
+  [ End Sequence ]
+
+-- | Build tcg-at-platformConfiguration-v2 attribute (OID 2.23.133.5.1.7.2)
+-- Per TCG Platform Certificate Profile v1.1:
+-- PlatformConfigurationV2 ::= SEQUENCE {
+--   componentIdentifiers [0] IMPLICIT SEQUENCE OF ComponentIdentifierV2
+-- }
+buildPlatformConfigurationV2Attr :: [ComponentConfigV2] -> Attribute
+buildPlatformConfigurationV2Attr [] =
+  -- Even with no components, create the attribute with empty sequence
+  Attribute tcg_at_platformConfiguration_v2
+    [[ Start Sequence
+     , Start (Container Context 0)  -- componentIdentifiers [0] IMPLICIT
+     , End (Container Context 0)
+     , End Sequence
+     ]]
+buildPlatformConfigurationV2Attr components =
+  Attribute tcg_at_platformConfiguration_v2
+    [[ Start Sequence
+     , Start (Container Context 0)  -- componentIdentifiers [0] IMPLICIT
+     ] ++ concatMap encodeComponentIdentifierV2 components ++
+     [ End (Container Context 0)
+     , End Sequence
+     ]]
+
+-- | TBB Security Assertions configuration (2.23.133.2.19)
+data TBBSecurityAssertions = TBBSecurityAssertions
+  { tbbVersion :: Int                                    -- Version (default: 0)
+  -- Common Criteria
+  , tbbCCVersion :: Maybe B.ByteString                   -- CC Version (e.g., "3.1")
+  , tbbEvalAssuranceLevel :: Maybe Int                   -- EAL1-7
+  , tbbEvalStatus :: Maybe Int                           -- 0=inProgress, 1=completed
+  , tbbPlus :: Maybe Bool                                -- Plus indicator
+  , tbbStrengthOfFunction :: Maybe Int                   -- 0=basic, 1=medium, 2=high
+  , tbbProtectionProfileOID :: Maybe B.ByteString        -- Protection Profile OID
+  , tbbProtectionProfileURI :: Maybe B.ByteString        -- Protection Profile URI
+  , tbbSecurityTargetOID :: Maybe B.ByteString           -- Security Target OID
+  , tbbSecurityTargetURI :: Maybe B.ByteString           -- Security Target URI
+  -- FIPS Level
+  , tbbFIPSVersion :: Maybe B.ByteString                 -- FIPS version (e.g., "140-2")
+  , tbbFIPSSecurityLevel :: Maybe Int                    -- Security Level 1-4
+  , tbbFIPSPlus :: Maybe Bool                            -- FIPS Plus indicator
+  -- RTM Type
+  , tbbRTMType :: Maybe Int                              -- 0=static, 1=dynamic, 2=nonHosted, 3=hybrid
+  -- ISO 9000
+  , tbbISO9000Certified :: Maybe Bool                    -- ISO 9000 Certified
+  , tbbISO9000URI :: Maybe B.ByteString                  -- ISO 9000 URI
+  } deriving (Show, Eq)
+
+-- | Component configuration data for platformConfiguration-v2 encoding
+-- This contains all fields needed to encode ComponentIdentifierV2 per TCG v1.1
+data ComponentConfigV2 = ComponentConfigV2
+  { ccv2Class :: B.ByteString                            -- Component class (4-byte value)
+  , ccv2Manufacturer :: B.ByteString                     -- Component manufacturer
+  , ccv2Model :: B.ByteString                            -- Component model
+  , ccv2Serial :: Maybe B.ByteString                     -- Component serial (optional)
+  , ccv2Revision :: Maybe B.ByteString                   -- Component revision (optional)
+  } deriving (Show, Eq)
+
+-- | Platform Config URI with optional hash for integrity verification
+-- Per TCG Platform Certificate Profile v1.1:
+-- URIReference ::= SEQUENCE {
+--   uniformResourceIdentifier IA5String (SIZE (1..URIMAX)),
+--   hashAlgorithm AlgorithmIdentifier OPTIONAL,
+--   hashValue BIT STRING OPTIONAL }
+data PlatformConfigUri = PlatformConfigUri
+  { pcUri :: B.ByteString                                -- Uniform Resource Identifier
+  , pcHashAlgorithm :: Maybe B.ByteString                -- Hash algorithm: "sha256", "sha384", "sha512"
+  , pcHashValue :: Maybe B.ByteString                    -- Hash value (raw bytes)
+  } deriving (Show, Eq)
+
+-- | Extended TCG attributes configuration
+data ExtendedTCGAttributes = ExtendedTCGAttributes
+  { etaPlatformConfigUri :: Maybe PlatformConfigUri      -- Platform Config URI with hash info
+  , etaPlatformClass :: Maybe B.ByteString               -- Platform Class (hex string)
+  , etaCredentialSpecVersion :: Maybe (Int, Int, Int)    -- Credential Spec (major, minor, revision)
+  , etaPlatformSpecVersion :: Maybe (Int, Int, Int)      -- Platform Spec (major, minor, revision)
+  , etaSecurityAssertions :: Maybe TBBSecurityAssertions -- TBB Security Assertions
+  , etaComponentsV2 :: Maybe [ComponentConfigV2]         -- Component configs for platformConfiguration-v2
+  } deriving (Show, Eq)
+
+-- | Create default extended attributes (all Nothing)
+defaultExtendedTCGAttributes :: ExtendedTCGAttributes
+defaultExtendedTCGAttributes = ExtendedTCGAttributes Nothing Nothing Nothing Nothing Nothing Nothing
+
 -- | Helper function to build attributes from configuration data
 buildAttributesFromConfig ::
   PlatformConfiguration ->
   [ComponentIdentifier] ->
   TPMInfo ->
   Either String Attributes
-buildAttributesFromConfig config components _tpmInfo = do
+buildAttributesFromConfig config components tpmInfo =
+  buildAttributesFromConfigExt config components tpmInfo defaultExtendedTCGAttributes
+
+-- | Helper function to build attributes with extended TCG attributes
+buildAttributesFromConfigExt ::
+  PlatformConfiguration ->
+  [ComponentIdentifier] ->
+  TPMInfo ->
+  ExtendedTCGAttributes ->
+  Either String Attributes
+buildAttributesFromConfigExt config components _tpmInfo extAttrs = do
   -- Create basic platform attributes
   let manufacturerAttr = Attribute tcg_at_platformManufacturer [[OctetString (pcManufacturer config)]]
       modelAttr = Attribute tcg_at_platformModel [[OctetString (pcModel config)]]
       serialAttr = Attribute tcg_at_platformSerial [[OctetString (pcSerial config)]]
       versionAttr = Attribute tcg_at_platformVersion [[OctetString (pcVersion config)]]
 
-      -- Create component attributes from the component identifiers
-      componentAttrs = componentsToAttribute components
-      
-  return $ Attributes ([manufacturerAttr, modelAttr, serialAttr, versionAttr] ++ componentAttrs)
+      -- Create component attributes
+      -- If etaComponentsV2 is provided, use platformConfiguration-v2 format (via buildExtendedTCGAttrs)
+      -- Otherwise, fall back to legacy componentsToAttribute format
+      componentAttrs = case etaComponentsV2 extAttrs of
+        Just _ -> []  -- Components will be added via buildExtendedTCGAttrs as platformConfiguration-v2
+        Nothing -> componentsToAttribute components  -- Legacy format
+
+      -- Create extended TCG attributes (includes platformConfiguration-v2 if etaComponentsV2 is set)
+      extendedAttrs = buildExtendedTCGAttrs extAttrs
+
+  return $ Attributes ([manufacturerAttr, modelAttr, serialAttr, versionAttr] ++ componentAttrs ++ extendedAttrs)
+
+-- | Build extended TCG attributes from configuration
+buildExtendedTCGAttrs :: ExtendedTCGAttributes -> [Attribute]
+buildExtendedTCGAttrs extAttrs =
+  let -- Platform Specification attribute (2.23.133.2.17)
+      platSpecAttr = case etaPlatformSpecVersion extAttrs of
+        Just (major, minor, rev) ->
+          [Attribute tcg_at_tcgPlatformSpecification
+            [[Start Sequence,
+              IntVal (fromIntegral major),
+              IntVal (fromIntegral minor),
+              IntVal (fromIntegral rev),
+              -- Platform Class as OctetString if provided
+              case etaPlatformClass extAttrs of
+                Just classBytes -> OctetString classBytes
+                Nothing -> OctetString (B8.pack "\x00\x00\x00\x01"), -- Default: Client platform class
+              End Sequence]]]
+        Nothing -> []
+
+      -- Credential Type attribute (2.23.133.2.25)
+      -- For Platform Certificate, use OID 2.23.133.8.2 (tcg-kp-PlatformAttributeCertificate)
+      credTypeAttr =
+        [Attribute tcg_at_tcgCredentialType
+          [[Start Sequence,
+            OID tcg_kp_PlatformAttributeCertificate,
+            End Sequence]]]
+
+      -- Credential Specification attribute (2.23.133.2.23)
+      credSpecAttr = case etaCredentialSpecVersion extAttrs of
+        Just (major, minor, rev) ->
+          [Attribute tcg_at_tcgCredentialSpecification
+            [[Start Sequence,
+              IntVal (fromIntegral major),
+              IntVal (fromIntegral minor),
+              IntVal (fromIntegral rev),
+              End Sequence]]]
+        Nothing -> []
+
+      -- Platform Config URI attribute (2.23.133.5.1.3)
+      -- Per TCG Platform Certificate Profile v1.1:
+      -- URIReference ::= SEQUENCE {
+      --   uniformResourceIdentifier IA5String (SIZE (1..URIMAX)),
+      --   hashAlgorithm AlgorithmIdentifier OPTIONAL,
+      --   hashValue BIT STRING OPTIONAL }
+      configUriAttr = case etaPlatformConfigUri extAttrs of
+        Just pcu ->
+          let uriASN1 = [ASN1String (ASN1CharacterString IA5 (pcUri pcu))]
+              -- AlgorithmIdentifier ::= SEQUENCE { algorithm OID, parameters ANY OPTIONAL }
+              -- Hash algorithm OIDs: SHA-256: 2.16.840.1.101.3.4.2.1, SHA-384: 2.16.840.1.101.3.4.2.2, SHA-512: 2.16.840.1.101.3.4.2.3
+              hashAlgASN1 = case pcHashAlgorithm pcu of
+                Just algName ->
+                  let algOID = case B8.unpack algName of
+                        "sha256" -> [2, 16, 840, 1, 101, 3, 4, 2, 1]
+                        "sha384" -> [2, 16, 840, 1, 101, 3, 4, 2, 2]
+                        "sha512" -> [2, 16, 840, 1, 101, 3, 4, 2, 3]
+                        _        -> [2, 16, 840, 1, 101, 3, 4, 2, 1]  -- default to SHA-256
+                  in [Start Sequence, OID algOID, End Sequence]
+                Nothing -> []
+              -- BIT STRING for hash value
+              hashValueASN1 = case pcHashValue pcu of
+                Just hashVal -> [BitString (toBitArray hashVal 0)]
+                Nothing -> []
+          in [Attribute tcg_paa_platformConfigUri
+               [[Start Sequence] ++ uriASN1 ++ hashAlgASN1 ++ hashValueASN1 ++ [End Sequence]]]
+        Nothing -> []
+
+      -- TBB Security Assertions attribute (2.23.133.2.19)
+      securityAssertionsAttr = case etaSecurityAssertions extAttrs of
+        Just tbb -> [buildTBBSecurityAssertionsAttr tbb]
+        Nothing -> []
+
+      -- Platform Configuration V2 attribute (2.23.133.5.1.7.2)
+      -- This is the TCG v1.1 compliant component encoding
+      platformConfigV2Attr = case etaComponentsV2 extAttrs of
+        Just comps -> [buildPlatformConfigurationV2Attr comps]
+        Nothing -> []
+  in platSpecAttr ++ credTypeAttr ++ credSpecAttr ++ configUriAttr ++ securityAssertionsAttr ++ platformConfigV2Attr
+
+-- | Build TBB Security Assertions attribute
+buildTBBSecurityAssertionsAttr :: TBBSecurityAssertions -> Attribute
+buildTBBSecurityAssertionsAttr tbb =
+  let -- Version (INTEGER)
+      versionASN1 = [IntVal (fromIntegral (tbbVersion tbb))]
+
+      -- Common Criteria Measures (SEQUENCE) - OPTIONAL [0]
+      -- Per TCG spec, EvaluationAssuranceLevel and EvaluationStatus are ENUMERATED
+      -- CommonCriteriaMeasures ::= SEQUENCE {
+      --   version IA5String,
+      --   assurancelevel EvaluationAssuranceLevel,
+      --   evaluationStatus EvaluationStatus,
+      --   plus BOOLEAN DEFAULT FALSE,
+      --   strengthOfFunction [0] StrengthOfFunction OPTIONAL,
+      --   profileOid [1] OBJECT IDENTIFIER OPTIONAL,
+      --   profileUri [2] URIReference OPTIONAL,
+      --   targetOid [3] OBJECT IDENTIFIER OPTIONAL,
+      --   targetUri [4] URIReference OPTIONAL }
+      ccMeasures = case (tbbCCVersion tbb, tbbEvalAssuranceLevel tbb) of
+        (Just ccVer, Just eal) ->
+          let baseContent =
+                [ Start (Container Context 0),
+                  Start Sequence,
+                  -- ccVersion (IA5String)
+                  ASN1String (ASN1CharacterString IA5 ccVer),
+                  -- assurancelevel (ENUMERATED - EvaluationAssuranceLevel)
+                  Enumerated (fromIntegral eal),
+                  -- evaluationStatus (ENUMERATED - EvaluationStatus) OPTIONAL
+                  case tbbEvalStatus tbb of
+                    Just status -> Enumerated (fromIntegral status)
+                    Nothing -> Enumerated 2, -- default: evaluationCompleted
+                  -- plus (BOOLEAN DEFAULT FALSE)
+                  case tbbPlus tbb of
+                    Just True -> Boolean True
+                    _ -> Boolean False
+                ]
+              -- strengthOfFunction [0] IMPLICIT StrengthOfFunction OPTIONAL
+              sofContent = case tbbStrengthOfFunction tbb of
+                Just sof -> [Other Context 0 (B.singleton (fromIntegral sof))]
+                Nothing -> []
+              -- profileOid [1] IMPLICIT OBJECT IDENTIFIER OPTIONAL
+              ppOidContent = case tbbProtectionProfileOID tbb of
+                Just oid -> [Other Context 1 oid]
+                Nothing -> []
+              -- profileUri [2] IMPLICIT URIReference OPTIONAL
+              ppUriContent = case tbbProtectionProfileURI tbb of
+                Just uri -> [Start (Container Context 2), ASN1String (ASN1CharacterString IA5 uri), End (Container Context 2)]
+                Nothing -> []
+              -- targetOid [3] IMPLICIT OBJECT IDENTIFIER OPTIONAL
+              stOidContent = case tbbSecurityTargetOID tbb of
+                Just oid -> [Other Context 3 oid]
+                Nothing -> []
+              -- targetUri [4] IMPLICIT URIReference OPTIONAL
+              stUriContent = case tbbSecurityTargetURI tbb of
+                Just uri -> [Start (Container Context 4), ASN1String (ASN1CharacterString IA5 uri), End (Container Context 4)]
+                Nothing -> []
+              endContent = [End Sequence, End (Container Context 0)]
+          in [baseContent ++ sofContent ++ ppOidContent ++ ppUriContent ++ stOidContent ++ stUriContent ++ endContent]
+        _ -> []
+
+      -- FIPS Level (SEQUENCE) - OPTIONAL [1]
+      -- Per TCG spec, SecurityLevel is ENUMERATED
+      fipsLevel = case (tbbFIPSVersion tbb, tbbFIPSSecurityLevel tbb) of
+        (Just fipsVer, Just level) ->
+          [[Start (Container Context 1),
+            Start Sequence,
+            -- fipsVersion (IA5String)
+            ASN1String (ASN1CharacterString IA5 fipsVer),
+            -- level (ENUMERATED - SecurityLevel)
+            Enumerated (fromIntegral level),
+            -- plus (BOOLEAN DEFAULT FALSE)
+            case tbbFIPSPlus tbb of
+              Just True -> Boolean True
+              _ -> Boolean False,
+            End Sequence,
+            End (Container Context 1)]]
+        _ -> []
+
+      -- RTM Type (ENUMERATED) - OPTIONAL [2] IMPLICIT
+      -- Per TCG spec, MeasurementRootType is ENUMERATED
+      -- For implicit tagging of a primitive, use Other with the encoded value
+      rtmTypeASN1 = case tbbRTMType tbb of
+        Just rtm -> [[Other Context 2 (B.singleton (fromIntegral rtm))]]
+        Nothing -> []
+
+      -- ISO 9000 Certified (BOOLEAN) - DEFAULT FALSE
+      iso9000Certified = case tbbISO9000Certified tbb of
+        Just True -> [[Boolean True]]
+        _ -> [[Boolean False]]
+
+      -- ISO 9000 URI (IA5String) - OPTIONAL
+      iso9000Uri = case tbbISO9000URI tbb of
+        Just uri -> [[ASN1String (ASN1CharacterString IA5 uri)]]
+        Nothing -> []
+
+      -- Combine all fields into a SEQUENCE
+      tbbContent = [Start Sequence] ++ versionASN1
+                   ++ concat ccMeasures
+                   ++ concat fipsLevel
+                   ++ concat rtmTypeASN1
+                   ++ concat iso9000Certified
+                   ++ concat iso9000Uri
+                   ++ [End Sequence]
+
+  in Attribute tcg_at_tbbSecurityAssertions [tbbContent]
 
 -- | Dummy signing function for testing purposes
 -- In production, replace with proper cryptographic signing
@@ -498,6 +872,55 @@ mkPlatformCertificate config components tpmInfo ekCert validity auth (algS, _pub
             return (sigBits, getSignatureALG algI)
 
       signedCert <- objectToSignedExactF signatureFunction finalCertInfo
+      return $
+        Right
+          Pair
+            { pairAlg = algS,
+              pairSignedCert = signedCert,
+              pairKey = privKey
+            }
+
+-- | Create a Platform Certificate with extended TCG attributes (IWG v1.1 full compliance)
+--
+-- This function creates a Platform Certificate with all optional TCG Platform Certificate
+-- Profile v1.1 attributes including:
+-- * tcg-at-tcgPlatformSpecification (2.23.133.2.17)
+-- * tcg-at-tcgCredentialType (2.23.133.2.25)
+-- * tcg-at-tcgCredentialSpecification (2.23.133.2.23)
+-- * tcg-at-platformConfigUri (2.23.133.5.1.3)
+mkPlatformCertificateExt ::
+  -- | Platform configuration data
+  PlatformConfiguration ->
+  -- | Component identifiers
+  [ComponentIdentifier] ->
+  -- | TPM information
+  TPMInfo ->
+  -- | TPM EK Certificate
+  Certificate ->
+  -- | Validity period (notBefore, notAfter)
+  (DateTime, DateTime) ->
+  -- | Authority signing the new certificate
+  Auth pubI privI pubS privS ->
+  -- | Keys for the new certificate
+  Keys pubS privS ->
+  -- | Hash algorithm ("sha256", "sha384", "sha512")
+  String ->
+  -- | Extended TCG attributes
+  ExtendedTCGAttributes ->
+  -- | Result: signed Platform Certificate pair
+  IO (Either String (Pair pubS privS))
+mkPlatformCertificateExt config components tpmInfo ekCert validity auth (algS, _pubKey, privKey) hashAlg extAttrs = do
+  let validityPeriod = uncurry AttCertValidityPeriod validity
+  case buildPlatformCertificateInfoWithValidityExt config components tpmInfo validityPeriod ekCert hashAlg extAttrs of
+    Left err -> return $ Left err
+    Right certInfo -> do
+      let signingKey = foldAuthPriv privKey pairKey auth
+          algI = foldAuthPubPriv algS pairAlg auth
+          signatureFunction objRaw = do
+            sigBits <- doSign algI signingKey objRaw
+            return (sigBits, getSignatureALG algI)
+
+      signedCert <- objectToSignedExactF signatureFunction certInfo
       return $
         Right
           Pair

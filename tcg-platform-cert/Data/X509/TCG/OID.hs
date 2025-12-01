@@ -36,6 +36,7 @@ module Data.X509.TCG.OID
     tcg_at_tpmVersion,
     tcg_at_tpmSpecification,
     tcg_at_tcgCredentialType,
+    tcg_at_tcgCredentialSpecification,
     tcg_at_tbbSecurityAssertions,
     tcg_at_tcgPlatformSpecification,
 
@@ -418,9 +419,14 @@ tcg_at_tbbSecurityAssertions :: OID
 tcg_at_tbbSecurityAssertions = tcgOID ++ [2, 19]
 
 -- | TCG Platform Specification attribute
--- OID: 2.23.133.2.25
+-- OID: 2.23.133.2.17 (tcg-at-tcgPlatformSpecification per IWG v1.1 Section 3.1.2)
 tcg_at_tcgPlatformSpecification :: OID
-tcg_at_tcgPlatformSpecification = tcgOID ++ [2, 25]
+tcg_at_tcgPlatformSpecification = tcgOID ++ [2, 17]
+
+-- | TCG Credential Specification attribute
+-- OID: 2.23.133.2.23 (tcg-at-tcgCredentialSpecification per IWG v1.1 Section 3.1.2)
+tcg_at_tcgCredentialSpecification :: OID
+tcg_at_tcgCredentialSpecification = tcgOID ++ [2, 23]
 
 -- * TCG Platform Attribute Authority OIDs (tcg-paa arc: 2.23.133.5.1.*)
 -- These OIDs are used in the subjectAltName extension of Platform Certificates

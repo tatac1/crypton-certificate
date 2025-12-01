@@ -13,6 +13,7 @@
 module Data.X509.TCG.Util.Certificate
   ( -- * Certificate Generation
     createSignedPlatformCertificate,
+    createSignedPlatformCertificateExt,
 
     -- * Certificate Loading
     loadPrivateKey,
@@ -258,6 +259,93 @@ createSignedPlatformCertificate config components tpmInfo caPrivKey _caCert ekCe
     keyType (PrivKeyEd448 _) = "Ed448"
     keyType (PrivKeyDSA _) = "DSA"
     keyType _ = "Unknown"
+
+-- | Create a signed Platform Certificate with extended TCG attributes (IWG v1.1 full compliance)
+createSignedPlatformCertificateExt :: PlatformConfiguration -> [ComponentIdentifier] -> TPMInfo -> PrivKey -> Certificate -> Certificate -> String -> TCG.ExtendedTCGAttributes -> IO (Either String SignedPlatformCertificate)
+createSignedPlatformCertificateExt config components tpmInfo caPrivKey _caCert ekCert hashAlg extAttrs = do
+  putStrLn "DEBUG: Starting createSignedPlatformCertificateExt with extended attributes"
+  putStrLn $ "DEBUG: Using hash algorithm: " ++ hashAlg
+
+  let nowDt = DateTime (Date 2024 December 1) (TimeOfDay 0 0 0 0)
+      laterDt = DateTime (Date 2025 December 1) (TimeOfDay 0 0 0 0)
+      validity = (nowDt, laterDt)
+
+  case caPrivKey of
+    PrivKeyRSA rsaPrivKey -> do
+      putStrLn "DEBUG: Using RSA private key with extended attributes"
+      let tempPrivKey = rsaPrivKey
+      let tempPubKey = RSA.private_pub rsaPrivKey
+
+      algRSA <- case hashAlg of
+        "sha256" -> return $ TCG.AlgRSA 2048 TCG.hashSHA256
+        "sha384" -> return $ TCG.AlgRSA 2048 TCG.hashSHA384
+        "sha512" -> return $ TCG.AlgRSA 2048 TCG.hashSHA512
+        _ -> return $ TCG.AlgRSA 2048 TCG.hashSHA384
+      let subjectKeys = (algRSA, tempPubKey, tempPrivKey)
+
+      putStrLn "DEBUG: About to call TCG.mkPlatformCertificateExt with RSA"
+      result <- TCG.mkPlatformCertificateExt config components tpmInfo ekCert validity TCG.Self subjectKeys hashAlg extAttrs
+      case result of
+        Left err -> return $ Left err
+        Right pair -> return $ Right (TCG.pairSignedCert pair)
+    PrivKeyEC _ecPrivKey -> do
+      putStrLn "DEBUG: Using EC private key with extended attributes"
+      let algEC = case hashAlg of
+            "sha256" -> TCG.AlgEC ECC.SEC_p256r1 TCG.hashSHA256
+            "sha384" -> TCG.AlgEC ECC.SEC_p256r1 TCG.hashSHA384
+            "sha512" -> TCG.AlgEC ECC.SEC_p256r1 TCG.hashSHA512
+            _ -> TCG.AlgEC ECC.SEC_p256r1 TCG.hashSHA384
+      (_, tempPubKey, tempPrivKey) <- TCG.generateKeys algEC
+      let subjectKeys = (algEC, tempPubKey, tempPrivKey)
+
+      putStrLn "DEBUG: About to call TCG.mkPlatformCertificateExt with EC"
+      result <- TCG.mkPlatformCertificateExt config components tpmInfo ekCert validity TCG.Self subjectKeys hashAlg extAttrs
+      case result of
+        Left err -> return $ Left err
+        Right pair -> return $ Right (TCG.pairSignedCert pair)
+    PrivKeyEd25519 ed25519PrivKey -> do
+      putStrLn "DEBUG: Using Ed25519 private key with extended attributes"
+      let algEd25519 = TCG.AlgEd25519
+      let tempPrivKey = ed25519PrivKey
+      (_, tempPubKey, _) <- TCG.generateKeys algEd25519
+      let subjectKeys = (algEd25519, tempPubKey, tempPrivKey)
+
+      putStrLn "DEBUG: About to call TCG.mkPlatformCertificateExt with Ed25519"
+      result <- TCG.mkPlatformCertificateExt config components tpmInfo ekCert validity TCG.Self subjectKeys hashAlg extAttrs
+      case result of
+        Left err -> return $ Left err
+        Right pair -> return $ Right (TCG.pairSignedCert pair)
+    PrivKeyEd448 ed448PrivKey -> do
+      putStrLn "DEBUG: Using Ed448 private key with extended attributes"
+      let algEd448 = TCG.AlgEd448
+      let tempPrivKey = ed448PrivKey
+      (_, tempPubKey, _) <- TCG.generateKeys algEd448
+      let subjectKeys = (algEd448, tempPubKey, tempPrivKey)
+
+      putStrLn "DEBUG: About to call TCG.mkPlatformCertificateExt with Ed448"
+      result <- TCG.mkPlatformCertificateExt config components tpmInfo ekCert validity TCG.Self subjectKeys hashAlg extAttrs
+      case result of
+        Left err -> return $ Left err
+        Right pair -> return $ Right (TCG.pairSignedCert pair)
+    PrivKeyDSA dsaPrivKey -> do
+      putStrLn "DEBUG: Using DSA private key with extended attributes"
+      let dsaParams = DSA.private_params dsaPrivKey
+      let tempPrivKey = dsaPrivKey
+      (_, tempPubKey, _) <- TCG.generateKeys (TCG.AlgDSA dsaParams TCG.hashSHA384)
+
+      algDSA <- case hashAlg of
+        "sha256" -> return $ TCG.AlgDSA dsaParams TCG.hashSHA256
+        "sha384" -> return $ TCG.AlgDSA dsaParams TCG.hashSHA384
+        "sha512" -> return $ TCG.AlgDSA dsaParams TCG.hashSHA512
+        _ -> return $ TCG.AlgDSA dsaParams TCG.hashSHA384
+      let subjectKeys = (algDSA, tempPubKey, tempPrivKey)
+
+      putStrLn "DEBUG: About to call TCG.mkPlatformCertificateExt with DSA"
+      result <- TCG.mkPlatformCertificateExt config components tpmInfo ekCert validity TCG.Self subjectKeys hashAlg extAttrs
+      case result of
+        Left err -> return $ Left err
+        Right pair -> return $ Right (TCG.pairSignedCert pair)
+    _ -> return $ Left $ "Unsupported private key type for extended certificate generation"
 
 -- | Validate platform configuration before certificate generation
 validatePlatformConfiguration :: PlatformConfiguration -> IO (Either String ())

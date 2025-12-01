@@ -158,12 +158,20 @@ data ExtendedPlatformConfiguration = ExtendedPlatformConfiguration
     epcComponents :: [ComponentIdentifier],
     -- Extended fields from IWG Platform Certificate Profile v1.1
     epcPlatformConfigUri :: Maybe B.ByteString,      -- Platform Configuration URI
-    epcPlatformClass :: Maybe B.ByteString,          -- Platform Class identifier  
+    epcPlatformClass :: Maybe B.ByteString,          -- Platform Class identifier
     epcSpecificationVersion :: Maybe B.ByteString,   -- TCG specification version
     epcMajorVersion :: Maybe Int,                    -- Major version number
-    epcMinorVersion :: Maybe Int,                    -- Minor version number  
+    epcMinorVersion :: Maybe Int,                    -- Minor version number
     epcPatchVersion :: Maybe Int,                    -- Patch version number
     epcPlatformQualifier :: Maybe B.ByteString,      -- Platform qualifier (Enterprise, Consumer, etc.)
+    -- TCG Credential Specification (2.23.133.2.23) fields
+    epcCredentialSpecMajor :: Maybe Int,             -- Credential spec major version (e.g., 1)
+    epcCredentialSpecMinor :: Maybe Int,             -- Credential spec minor version (e.g., 1)
+    epcCredentialSpecRevision :: Maybe Int,          -- Credential spec revision (e.g., 13)
+    -- TCG Platform Specification (2.23.133.2.17) fields
+    epcPlatformSpecMajor :: Maybe Int,               -- Platform spec major version (e.g., 2 for TPM 2.0)
+    epcPlatformSpecMinor :: Maybe Int,               -- Platform spec minor version (e.g., 0)
+    epcPlatformSpecRevision :: Maybe Int,            -- Platform spec revision (e.g., 164)
     -- Additional platform fields
     epcCertificationLevel :: Maybe Int,              -- Certification level (1-7)
     epcPlatformQualifiers :: Maybe [B.ByteString],   -- List of platform qualifiers
@@ -526,8 +534,9 @@ instance ASN1Object ComponentStatus where
   fromASN1 _ = Left "ComponentStatus: Invalid ASN1 structure"
 
 instance ASN1Object ExtendedPlatformConfiguration where
-  toASN1 (ExtendedPlatformConfiguration mfg model ver serial comps configUri platClass specVer 
-          majVer minVer patchVer platQual certLvl quals rot rtmType bootMode fwVer polRef) xs =
+  toASN1 (ExtendedPlatformConfiguration mfg model ver serial comps configUri platClass specVer
+          majVer minVer patchVer platQual credSpecMaj credSpecMin credSpecRev
+          platSpecMaj platSpecMin platSpecRev certLvl quals rot rtmType bootMode fwVer polRef) xs =
     [Start Sequence]
     ++ [OctetString mfg, OctetString model, OctetString ver, OctetString serial]
     ++ [Start Sequence] ++ concatMap (\comp -> toASN1 comp []) comps ++ [End Sequence]
@@ -539,6 +548,12 @@ instance ASN1Object ExtendedPlatformConfiguration where
     ++ maybe [] (\min' -> [IntVal (fromIntegral min')]) minVer
     ++ maybe [] (\patch -> [IntVal (fromIntegral patch)]) patchVer
     ++ maybe [] (\qual -> [OctetString qual]) platQual
+    ++ maybe [] (\maj -> [IntVal (fromIntegral maj)]) credSpecMaj
+    ++ maybe [] (\min' -> [IntVal (fromIntegral min')]) credSpecMin
+    ++ maybe [] (\rev -> [IntVal (fromIntegral rev)]) credSpecRev
+    ++ maybe [] (\maj -> [IntVal (fromIntegral maj)]) platSpecMaj
+    ++ maybe [] (\min' -> [IntVal (fromIntegral min')]) platSpecMin
+    ++ maybe [] (\rev -> [IntVal (fromIntegral rev)]) platSpecRev
     ++ maybe [] (\lvl -> [IntVal (fromIntegral lvl)]) certLvl
     ++ maybe [] (\qs -> [Start Sequence] ++ concatMap (\q -> [OctetString q]) qs ++ [End Sequence]) quals
     ++ maybe [] (\r -> [OctetString r]) rot
@@ -551,17 +566,17 @@ instance ASN1Object ExtendedPlatformConfiguration where
     
   fromASN1 (Start Sequence : OctetString mfg : OctetString model : OctetString ver : OctetString serial : Start Sequence : rest) = do
     (comps, rest') <- parseExtendedComponentList rest []
-    -- Parse optional fields (simplified implementation)  
-    parseExtendedFields rest' mfg model ver serial comps Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing
+    -- Parse optional fields (simplified implementation)
+    parseExtendedFields rest' mfg model ver serial comps Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing
     where
       parseExtendedComponentList (End Sequence : remaining) acc = Right (reverse acc, remaining)
       parseExtendedComponentList remaining acc = do
         (comp, rest'') <- fromASN1 remaining
         parseExtendedComponentList rest'' (comp : acc)
-      parseExtendedFields (End Sequence : xs) mfg' model' ver' serial' comps' configUri' platClass' specVer' majVer' minVer' patchVer' platQual' certLvl' quals' rot' rtmType' bootMode' fwVer' polRef' =
-        Right (ExtendedPlatformConfiguration mfg' model' ver' serial' comps' configUri' platClass' specVer' majVer' minVer' patchVer' platQual' certLvl' quals' rot' rtmType' bootMode' fwVer' polRef', xs)
-      parseExtendedFields (OctetString val : rest'') mfg' model' ver' serial' comps' Nothing platClass' specVer' majVer' minVer' patchVer' platQual' certLvl' quals' rot' rtmType' bootMode' fwVer' polRef' =
-        parseExtendedFields rest'' mfg' model' ver' serial' comps' (Just val) platClass' specVer' majVer' minVer' patchVer' platQual' certLvl' quals' rot' rtmType' bootMode' fwVer' polRef'
-      parseExtendedFields _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ = 
+      parseExtendedFields (End Sequence : xs) mfg' model' ver' serial' comps' configUri' platClass' specVer' majVer' minVer' patchVer' platQual' credSpecMaj' credSpecMin' credSpecRev' platSpecMaj' platSpecMin' platSpecRev' certLvl' quals' rot' rtmType' bootMode' fwVer' polRef' =
+        Right (ExtendedPlatformConfiguration mfg' model' ver' serial' comps' configUri' platClass' specVer' majVer' minVer' patchVer' platQual' credSpecMaj' credSpecMin' credSpecRev' platSpecMaj' platSpecMin' platSpecRev' certLvl' quals' rot' rtmType' bootMode' fwVer' polRef', xs)
+      parseExtendedFields (OctetString val : rest'') mfg' model' ver' serial' comps' Nothing platClass' specVer' majVer' minVer' patchVer' platQual' credSpecMaj' credSpecMin' credSpecRev' platSpecMaj' platSpecMin' platSpecRev' certLvl' quals' rot' rtmType' bootMode' fwVer' polRef' =
+        parseExtendedFields rest'' mfg' model' ver' serial' comps' (Just val) platClass' specVer' majVer' minVer' patchVer' platQual' credSpecMaj' credSpecMin' credSpecRev' platSpecMaj' platSpecMin' platSpecRev' certLvl' quals' rot' rtmType' bootMode' fwVer' polRef'
+      parseExtendedFields _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ =
         Left "ExtendedPlatformConfiguration: Could not parse extended fields"
   fromASN1 _ = Left "ExtendedPlatformConfiguration: Expected Start Sequence"

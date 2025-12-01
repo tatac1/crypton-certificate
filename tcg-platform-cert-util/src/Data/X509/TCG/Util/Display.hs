@@ -98,7 +98,6 @@ formatBS = BC.unpack
 -- - Issuer DN
 -- - Holder (EK Certificate) information
 -- - Validity period
--- - Platform information (from SubjectAltName extension)
 -- - TCG Attributes with full content (Table 3 fields)
 -- - Components with class values
 -- - Extensions with OID names
@@ -142,17 +141,6 @@ showPlatformCert signedCert = do
       showRawAttribute "    " attr
   putStrLn ""
 
-  -- Platform Information (from SubjectAltName in extensions)
-  putStrLn "  Platform Information (from SubjectAltName):"
-  case getPlatformInfo signedCert of
-    Just info -> do
-      putStrLn $ "    Manufacturer: " ++ formatBS (piManufacturer info)
-      putStrLn $ "    Model: " ++ formatBS (piModel info)
-      putStrLn $ "    Version: " ++ formatBS (piVersion info)
-      putStrLn $ "    Serial: " ++ formatBS (piSerial info)
-    Nothing -> putStrLn "    (No platform information in SubjectAltName)"
-  putStrLn ""
-
   -- Extensions with OID names
   showExtensionsImproved (pciExtensions certInfo)
 
@@ -161,23 +149,59 @@ showRawAttribute :: String -> Attribute -> IO ()
 showRawAttribute indent attr = do
   let oid = attrType attr
       values = attrValues attr
-  putStrLn $ indent ++ formatOIDWithName oid ++ ":"
   -- Parse the attribute values based on OID
   case oid of
+    -- tcg-at-platformManufacturer (2.23.133.2.4)
+    [2, 23, 133, 2, 4] -> showPlatformStringAttribute indent "tcg-at-platformManufacturer" values
+    -- tcg-at-platformModel (2.23.133.2.5)
+    [2, 23, 133, 2, 5] -> showPlatformStringAttribute indent "tcg-at-platformModel" values
+    -- tcg-at-platformSerial (2.23.133.2.6)
+    [2, 23, 133, 2, 6] -> showPlatformStringAttribute indent "tcg-at-platformSerial" values
+    -- tcg-at-platformVersion (2.23.133.2.7)
+    [2, 23, 133, 2, 7] -> showPlatformStringAttribute indent "tcg-at-platformVersion" values
     -- tcg-at-tcgPlatformSpecification (2.23.133.2.17)
-    [2, 23, 133, 2, 17] -> showTCGPlatformSpecification (indent ++ "  ") values
+    [2, 23, 133, 2, 17] -> do
+      putStrLn $ indent ++ formatOIDWithName oid ++ ":"
+      showTCGPlatformSpecification (indent ++ "  ") values
     -- tcg-at-tcgCredentialType (2.23.133.2.25)
-    [2, 23, 133, 2, 25] -> showTCGCredentialType (indent ++ "  ") values
+    [2, 23, 133, 2, 25] -> do
+      putStrLn $ indent ++ formatOIDWithName oid ++ ":"
+      showTCGCredentialType (indent ++ "  ") values
     -- tcg-at-tcgCredentialSpecification (2.23.133.2.23)
-    [2, 23, 133, 2, 23] -> showTCGCredentialSpecification (indent ++ "  ") values
+    [2, 23, 133, 2, 23] -> do
+      putStrLn $ indent ++ formatOIDWithName oid ++ ":"
+      showTCGCredentialSpecification (indent ++ "  ") values
     -- tcg-at-tbbSecurityAssertions (2.23.133.2.19)
-    [2, 23, 133, 2, 19] -> showTBBSecurityAssertions (indent ++ "  ") values
+    [2, 23, 133, 2, 19] -> do
+      putStrLn $ indent ++ formatOIDWithName oid ++ ":"
+      showTBBSecurityAssertions (indent ++ "  ") values
     -- tcg-at-platformConfiguration-v2 (2.23.133.5.1.7.2)
-    [2, 23, 133, 5, 1, 7, 2] -> showPlatformConfigurationV2 (indent ++ "  ") values
+    [2, 23, 133, 5, 1, 7, 2] -> do
+      putStrLn $ indent ++ formatOIDWithName oid ++ ":"
+      showPlatformConfigurationV2 (indent ++ "  ") values
     -- tcg-at-platformConfiguration (2.23.133.5.1.7.1)
-    [2, 23, 133, 5, 1, 7, 1] -> showPlatformConfigurationV1 (indent ++ "  ") values
-    -- Default: show raw ASN.1 values
-    _ -> showRawAttributeValues (indent ++ "  ") values
+    [2, 23, 133, 5, 1, 7, 1] -> do
+      putStrLn $ indent ++ formatOIDWithName oid ++ ":"
+      showPlatformConfigurationV1 (indent ++ "  ") values
+    -- Default: show raw ASN.1 values with OID header
+    _ -> do
+      putStrLn $ indent ++ formatOIDWithName oid ++ ":"
+      showRawAttributeValues (indent ++ "  ") values
+
+-- | Show platform string attribute (manufacturer, model, serial, version)
+-- These are encoded as OCTET STRING containing UTF8 text
+showPlatformStringAttribute :: String -> String -> [[ASN1]] -> IO ()
+showPlatformStringAttribute indent attrName values = do
+  let decodedValue = extractOctetStringAsText values
+  putStrLn $ indent ++ attrName ++ ": " ++ decodedValue
+
+-- | Extract OCTET STRING content as UTF8 text
+extractOctetStringAsText :: [[ASN1]] -> String
+extractOctetStringAsText values =
+  case concat values of
+    [OctetString bs] -> BC.unpack bs
+    (OctetString bs : _) -> BC.unpack bs
+    _ -> "(unable to decode)"
 
 -- | Show raw attribute values as ASN.1
 showRawAttributeValues :: String -> [[ASN1]] -> IO ()
