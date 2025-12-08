@@ -1,0 +1,3 @@
+[submodule "tcg-platform-cert-util-pkcs11"]
+	path = tcg-platform-cert-util-pkcs11
+	url = https://magnum.dev.cdi/tomita/tcg-platform-cert-util-pkcs11.git
