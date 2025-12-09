@@ -11,8 +11,10 @@ import qualified Data.ByteString.Char8 as BC
 import Data.Yaml (encodeFile, decodeFileEither)
 import System.Directory (doesFileExist)
 import System.IO.Temp (withSystemTempFile)
+import qualified Data.Text.Encoding as T
 
 import Data.X509.TCG.Util.Config
+import Data.X509.TCG.Util.Paccor
 import Data.X509.TCG
 
 tests :: TestTree
@@ -20,6 +22,7 @@ tests = testGroup "Config Tests"
   [ configLoadingTests
   , yamlSerializationTests
   , componentConversionTests
+  , paccorConversionTests
   , propertyTests
   ]
 
@@ -33,10 +36,14 @@ configLoadingTests = testGroup "Configuration Loading"
               , pccModel = "Test Model"
               , pccVersion = "1.0"
               , pccSerial = "TEST001"
+              , pccManufacturerId = Nothing
               , pccValidityDays = Just 365
               , pccKeySize = Just 2048
               , pccComponents = []
+              , pccProperties = Nothing
               , pccPlatformConfigUri = Nothing
+              , pccComponentsUri = Nothing
+              , pccPropertiesUri = Nothing
               , pccPlatformClass = Nothing
               , pccSpecificationVersion = Nothing
               , pccMajorVersion = Nothing
@@ -106,16 +113,33 @@ yamlSerializationTests = testGroup "YAML Serialization"
             , pccModel = "Model"
             , pccVersion = "Version"
             , pccSerial = "Serial"
+            , pccManufacturerId = Just "1.3.6.1.4.1.99999"
             , pccValidityDays = Just 365
             , pccKeySize = Just 2048
             , pccComponents =
                 [ ComponentConfig
-                    { ccClass = "00030003"
+                    { ccComponentClass = Just ComponentClassConfig
+                        { cccRegistry = "2.23.133.18.3.1"
+                        , cccValue = "00030003"
+                        }
+                    , ccClass = "00030003"
                     , ccManufacturer = "Component Corp"
                     , ccModel = "Component Model"
                     , ccSerial = Just "COMP001"
                     , ccRevision = Just "1.0"
+                    , ccManufacturerId = Nothing
+                    , ccFieldReplaceable = Just True
                     , ccAddresses = Nothing
+                    , ccPlatformCert = Nothing
+                    , ccPlatformCertUri = Nothing
+                    , ccStatus = Nothing
+                    }
+                ]
+            , pccProperties = Just
+                [ PropertyConfig
+                    { propName = "test.property"
+                    , propValue = "test-value"
+                    , propStatus = Nothing
                     }
                 ]
             , pccPlatformConfigUri = Just URIReferenceConfig
@@ -123,6 +147,8 @@ yamlSerializationTests = testGroup "YAML Serialization"
                 , uriHashAlgorithm = Nothing
                 , uriHashValue = Nothing
                 }
+            , pccComponentsUri = Nothing
+            , pccPropertiesUri = Nothing
             , pccPlatformClass = Just "00000001"
             , pccSpecificationVersion = Just "1.1"
             , pccMajorVersion = Just 1
@@ -165,14 +191,20 @@ componentConversionTests :: TestTree
 componentConversionTests = testGroup "Component Conversion"
   [ testCase "YAML to ComponentIdentifier conversion" $ do
       let yamlComponent = ComponentConfig
-            { ccClass = "00030003"
+            { ccComponentClass = Nothing
+            , ccClass = "00030003"
             , ccManufacturer = "Test Manufacturer"
             , ccModel = "Test Model"
             , ccSerial = Just "TEST001"
             , ccRevision = Just "1.0"
+            , ccManufacturerId = Nothing
+            , ccFieldReplaceable = Nothing
             , ccAddresses = Nothing
+            , ccPlatformCert = Nothing
+            , ccPlatformCertUri = Nothing
+            , ccStatus = Nothing
             }
-      
+
       let componentId = yamlComponentToComponentIdentifier yamlComponent
       ciManufacturer componentId @?= BC.pack "Test Manufacturer"
       ciModel componentId @?= BC.pack "Test Model"
@@ -191,12 +223,18 @@ propertyTests :: TestTree
 propertyTests = testGroup "Property Tests"
   [ testProperty "Component conversion preserves data" $ \manufacturer model serial revision ->
       let yamlComp = ComponentConfig
-            { ccClass = "00000000"
+            { ccComponentClass = Nothing
+            , ccClass = "00000000"
             , ccManufacturer = manufacturer
             , ccModel = model
             , ccSerial = Just serial
             , ccRevision = Just revision
+            , ccManufacturerId = Nothing
+            , ccFieldReplaceable = Nothing
             , ccAddresses = Nothing
+            , ccPlatformCert = Nothing
+            , ccPlatformCertUri = Nothing
+            , ccStatus = Nothing
             }
           compId = yamlComponentToComponentIdentifier yamlComp
       in ciManufacturer compId == BC.pack manufacturer &&
@@ -210,10 +248,14 @@ propertyTests = testGroup "Property Tests"
             , pccModel = model
             , pccVersion = version
             , pccSerial = serial
+            , pccManufacturerId = Nothing
             , pccValidityDays = Nothing
             , pccKeySize = Nothing
             , pccComponents = []
+            , pccProperties = Nothing
             , pccPlatformConfigUri = Nothing
+            , pccComponentsUri = Nothing
+            , pccPropertiesUri = Nothing
             , pccPlatformClass = Nothing
             , pccSpecificationVersion = Nothing
             , pccMajorVersion = Nothing
@@ -232,4 +274,228 @@ propertyTests = testGroup "Property Tests"
          pccModel config == model &&
          pccVersion config == version &&
          pccSerial config == serial
+  ]
+
+-- | Test paccor JSON conversion functionality
+paccorConversionTests :: TestTree
+paccorConversionTests = testGroup "Paccor JSON Conversion"
+  [ testCase "Convert paccor config to YAML config" $ do
+      let paccorConfig = PaccorConfig
+            { paccorPlatform = PaccorPlatform
+                { platformManufacturerStr = "Dell Inc."
+                , platformModel = "OptiPlex 7040"
+                , platformVersion = Just "1.0"
+                , platformSerial = Just "306VRD2"
+                , platformManufacturerId = Just "1.3.6.1.4.1.674"
+                }
+            , paccorComponents = Just
+                [ PaccorComponent
+                    { componentClass = PaccorComponentClass
+                        { componentClassRegistry = "2.23.133.18.3.1"
+                        , componentClassValue = "00000001"
+                        }
+                    , componentManufacturer = Just "Dell Inc."
+                    , componentModel = Just "Desktop"
+                    , componentSerial = Just "306VRD2"
+                    , componentRevision = Just "Not Specified"
+                    , componentManufacturerId = Nothing
+                    , componentFieldReplaceable = Nothing
+                    , componentAddresses = Nothing
+                    , componentStatus = Nothing
+                    , componentPlatformCert = Nothing
+                    , componentPlatformCertUri = Nothing
+                    }
+                ]
+            , paccorComponentsUri = Nothing
+            , paccorProperties = Nothing
+            , paccorPropertiesUri = Nothing
+            }
+
+      let yamlConfig = paccorToYamlConfig paccorConfig
+      pccManufacturer yamlConfig @?= "Dell Inc."
+      pccModel yamlConfig @?= "OptiPlex 7040"
+      pccVersion yamlConfig @?= "1.0"
+      pccSerial yamlConfig @?= "306VRD2"
+      pccManufacturerId yamlConfig @?= Just "1.3.6.1.4.1.674"  -- Test PLATFORMMANUFACTURERID
+      length (pccComponents yamlConfig) @?= 1
+
+      let comp = head (pccComponents yamlConfig)
+      ccClass comp @?= "00000001"
+      ccManufacturer comp @?= "Dell Inc."
+      ccModel comp @?= "Desktop"
+      -- Test ComponentClassConfig
+      case ccComponentClass comp of
+        Just ccc -> do
+          cccRegistry ccc @?= "2.23.133.18.3.1"
+          cccValue ccc @?= "00000001"
+        Nothing -> assertFailure "Expected componentClass to be present"
+
+  , testCase "Format detection - JSON extension" $ do
+      let format = detectInputFormat "device.json" ""
+      format @?= FormatJSON
+
+  , testCase "Format detection - YAML extension" $ do
+      let formatYaml = detectInputFormat "config.yaml" ""
+      let formatYml = detectInputFormat "config.yml" ""
+      formatYaml @?= FormatYAML
+      formatYml @?= FormatYAML
+
+  , testCase "Format detection - JSON content" $ do
+      let format = detectInputFormat "unknown" "{ \"key\": \"value\" }"
+      format @?= FormatJSON
+
+  , testCase "Convert paccor with addresses" $ do
+      let paccorConfig = PaccorConfig
+            { paccorPlatform = PaccorPlatform
+                { platformManufacturerStr = "Test Corp"
+                , platformModel = "Test Model"
+                , platformVersion = Nothing
+                , platformSerial = Nothing
+                , platformManufacturerId = Nothing
+                }
+            , paccorComponents = Just
+                [ PaccorComponent
+                    { componentClass = PaccorComponentClass
+                        { componentClassRegistry = "2.23.133.18.3.1"
+                        , componentClassValue = "00090002"
+                        }
+                    , componentManufacturer = Just "Intel"
+                    , componentModel = Just "Wireless"
+                    , componentSerial = Just "aa:bb:cc:dd:ee:ff"
+                    , componentRevision = Nothing
+                    , componentManufacturerId = Just "1.3.6.1.4.1.343"  -- Intel PEN
+                    , componentFieldReplaceable = Just "true"
+                    , componentAddresses = Just
+                        [ PaccorAddress
+                            { paccorEthernetMac = Nothing
+                            , paccorWlanMac = Just "aa:bb:cc:dd:ee:ff"
+                            , paccorBluetoothMac = Nothing
+                            }
+                        ]
+                    , componentStatus = Nothing
+                    , componentPlatformCert = Nothing
+                    , componentPlatformCertUri = Nothing
+                    }
+                ]
+            , paccorComponentsUri = Nothing
+            , paccorProperties = Nothing
+            , paccorPropertiesUri = Nothing
+            }
+
+      let yamlConfig = paccorToYamlConfig paccorConfig
+      length (pccComponents yamlConfig) @?= 1
+
+      let comp = head (pccComponents yamlConfig)
+      ccFieldReplaceable comp @?= Just True  -- Test FIELDREPLACEABLE conversion
+      ccManufacturerId comp @?= Just "1.3.6.1.4.1.343"  -- Test MANUFACTURERID conversion
+      case ccAddresses comp of
+        Just (addr:_) -> addrWlanMac addr @?= Just "aa:bb:cc:dd:ee:ff"
+        _ -> assertFailure "Expected addresses to be present"
+
+  , testCase "Convert paccor with PROPERTIES" $ do
+      let paccorConfig = PaccorConfig
+            { paccorPlatform = PaccorPlatform
+                { platformManufacturerStr = "Test Corp"
+                , platformModel = "Test Model"
+                , platformVersion = Just "1.0"
+                , platformSerial = Just "SN001"
+                , platformManufacturerId = Nothing
+                }
+            , paccorComponents = Nothing
+            , paccorComponentsUri = Nothing
+            , paccorProperties = Just
+                [ PaccorProperty
+                    { propertyName = "firmware.version"
+                    , propertyValue = "1.2.3"
+                    , propertyStatus = Nothing
+                    }
+                , PaccorProperty
+                    { propertyName = "bios.vendor"
+                    , propertyValue = "Test BIOS"
+                    , propertyStatus = Just "ADDED"
+                    }
+                ]
+            , paccorPropertiesUri = Nothing
+            }
+
+      let yamlConfig = paccorToYamlConfig paccorConfig
+      case pccProperties yamlConfig of
+        Just props -> do
+          length props @?= 2
+          let prop1 = head props
+          propName prop1 @?= "firmware.version"
+          propValue prop1 @?= "1.2.3"
+          let prop2 = props !! 1
+          propStatus prop2 @?= Just "ADDED"
+        Nothing -> assertFailure "Expected properties to be present"
+
+  , testCase "Convert paccor with PLATFORMCERT" $ do
+      let paccorConfig = PaccorConfig
+            { paccorPlatform = PaccorPlatform
+                { platformManufacturerStr = "Test Corp"
+                , platformModel = "Test Model"
+                , platformVersion = Nothing
+                , platformSerial = Nothing
+                , platformManufacturerId = Nothing
+                }
+            , paccorComponents = Just
+                [ PaccorComponent
+                    { componentClass = PaccorComponentClass
+                        { componentClassRegistry = "2.23.133.18.3.1"
+                        , componentClassValue = "0000000A"
+                        }
+                    , componentManufacturer = Just "ABC OEM"
+                    , componentModel = Just "WR06X7871FTL"
+                    , componentSerial = Just "TEST123"
+                    , componentRevision = Nothing
+                    , componentManufacturerId = Nothing
+                    , componentFieldReplaceable = Nothing
+                    , componentAddresses = Nothing
+                    , componentStatus = Nothing
+                    , componentPlatformCert = Just PaccorPlatformCert
+                        { pcAttributeCertId = Just PaccorAttributeCertId
+                            { attrCertHashAlgorithm = "1.3.6.1.4.1.22554.1.2.1"
+                            , attrCertHashOverSignature = "ABCD1234"
+                            }
+                        , pcGenericCertId = Just PaccorGenericCertId
+                            { genCertIssuer =
+                                [ PaccorGeneralName { gnName = "2.5.4.6", gnValue = "US" }
+                                , PaccorGeneralName { gnName = "2.5.4.10", gnValue = "Test Corp" }
+                                ]
+                            , genCertSerial = "12345"
+                            }
+                        }
+                    , componentPlatformCertUri = Just PaccorUri
+                        { paccorUriValue = "https://example.com/cert.cer"
+                        , paccorUriHashAlgorithm = Nothing
+                        , paccorUriHashValue = Nothing
+                        }
+                    }
+                ]
+            , paccorComponentsUri = Nothing
+            , paccorProperties = Nothing
+            , paccorPropertiesUri = Nothing
+            }
+
+      let yamlConfig = paccorToYamlConfig paccorConfig
+      length (pccComponents yamlConfig) @?= 1
+
+      let comp = head (pccComponents yamlConfig)
+      case ccPlatformCert comp of
+        Just pc -> do
+          case cpcAttributeCertId pc of
+            Just acid -> do
+              acidHashAlgorithm acid @?= "1.3.6.1.4.1.22554.1.2.1"
+              acidHashValue acid @?= "ABCD1234"
+            Nothing -> assertFailure "Expected attributeCertId to be present"
+          case cpcGenericCertId pc of
+            Just gcid -> do
+              gcidSerial gcid @?= "12345"
+              length (gcidIssuer gcid) @?= 2
+            Nothing -> assertFailure "Expected genericCertId to be present"
+        Nothing -> assertFailure "Expected platformCert to be present"
+
+      case ccPlatformCertUri comp of
+        Just uri -> uriUri uri @?= "https://example.com/cert.cer"
+        Nothing -> assertFailure "Expected platformCertUri to be present"
   ]

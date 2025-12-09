@@ -39,19 +39,29 @@ configToASN1Tests = testGroup "Configuration to ASN.1 Workflow"
               , pccModel = "Test Model"
               , pccVersion = "2.0"
               , pccSerial = "INT001"
+              , pccManufacturerId = Nothing
               , pccValidityDays = Just 365
               , pccKeySize = Just 2048
               , pccComponents =
                   [ ComponentConfig
-                      { ccClass = "00030003"
+                      { ccComponentClass = Nothing
+                      , ccClass = "00030003"
                       , ccManufacturer = "Component Corp"
                       , ccModel = "Component Model"
                       , ccSerial = Just "COMP001"
                       , ccRevision = Just "1.0"
+                      , ccManufacturerId = Nothing
+                      , ccFieldReplaceable = Nothing
                       , ccAddresses = Nothing
+                      , ccPlatformCert = Nothing
+                      , ccPlatformCertUri = Nothing
+                      , ccStatus = Nothing
                       }
                   ]
+              , pccProperties = Nothing
               , pccPlatformConfigUri = Nothing
+              , pccComponentsUri = Nothing
+              , pccPropertiesUri = Nothing
               , pccPlatformClass = Nothing
               , pccSpecificationVersion = Nothing
               , pccMajorVersion = Nothing
@@ -107,14 +117,18 @@ certificateWorkflowTests = testGroup "Certificate Workflow"
             , pccModel = "Workflow Model"
             , pccVersion = "1.5"
             , pccSerial = "WF001"
+            , pccManufacturerId = Nothing
             , pccValidityDays = Just 730
             , pccKeySize = Just 2048
             , pccComponents = []
+            , pccProperties = Nothing
             , pccPlatformConfigUri = Just URIReferenceConfig
                 { uriUri = "https://example.com/workflow"
                 , uriHashAlgorithm = Nothing
                 , uriHashValue = Nothing
                 }
+            , pccComponentsUri = Nothing
+            , pccPropertiesUri = Nothing
             , pccPlatformClass = Just "00000002"
             , pccSpecificationVersion = Just "1.2"
             , pccMajorVersion = Just 1
@@ -139,17 +153,23 @@ certificateWorkflowTests = testGroup "Certificate Workflow"
       let tpmInfo = createDefaultTPMInfo
       -- Verify TPM info has expected defaults
       show tpmInfo `shouldContainSubstring` "TPM 2.0"
-      
+
   , testCase "Component conversion workflow" $ do
       let componentConfig = ComponentConfig
-            { ccClass = "00040004"
+            { ccComponentClass = Nothing
+            , ccClass = "00040004"
             , ccManufacturer = "Workflow Component Corp"
             , ccModel = "Workflow Component"
             , ccSerial = Just "WC001"
             , ccRevision = Just "2.0"
+            , ccManufacturerId = Nothing
+            , ccFieldReplaceable = Nothing
             , ccAddresses = Nothing
+            , ccPlatformCert = Nothing
+            , ccPlatformCertUri = Nothing
+            , ccStatus = Nothing
             }
-      
+
       let componentId = yamlComponentToComponentIdentifier componentConfig
       -- Verify conversion worked correctly
       show componentId `shouldContainSubstring` "Workflow Component Corp"
@@ -247,10 +267,14 @@ errorHandlingTests = testGroup "Error Handling"
               , pccModel = "Error Model"
               , pccVersion = "1.0"
               , pccSerial = "ERR001"
+              , pccManufacturerId = Nothing
               , pccValidityDays = Nothing
               , pccKeySize = Nothing
               , pccComponents = []
+              , pccProperties = Nothing
               , pccPlatformConfigUri = Nothing
+              , pccComponentsUri = Nothing
+              , pccPropertiesUri = Nothing
               , pccPlatformClass = Nothing
               , pccSpecificationVersion = Nothing
               , pccMajorVersion = Nothing
