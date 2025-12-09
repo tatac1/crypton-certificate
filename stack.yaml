@@ -10,6 +10,7 @@ packages:
 - tcg-platform-cert
 - tcg-platform-cert-validation
 - tcg-platform-cert-util
+- platform-hardware-info
 
 nix:
   pure: false
