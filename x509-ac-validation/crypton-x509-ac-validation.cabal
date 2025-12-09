@@ -51,6 +51,7 @@ Test-Suite test-x509-ac-validation
                    , Certificate
                    , TestVectors
                    , StaticTests
+                   , SBV
   Build-Depends:     base >= 3 && < 5
                    , bytestring
                    , tasty
@@ -64,6 +65,7 @@ Test-Suite test-x509-ac-validation
                    , crypton-x509-ac-validation
                    , crypton
                    , memory
+                   , sbv >= 10.0
   ghc-options:       -Wall -fno-warn-orphans -fno-warn-missing-signatures
 
 source-repository head
