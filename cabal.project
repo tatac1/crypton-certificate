@@ -1,11 +1,12 @@
 packages:
+  crypton-x509
+  crypton-x509-store
+  crypton-x509-system
+  crypton-x509-validation
+  crypton-x509-util
   tcg-platform-cert
   tcg-platform-cert-validation
   tcg-platform-cert-util
-
--- Additional package repositories
--- repository hackage.haskell.org
---   url: https://hackage.haskell.org/
 
 -- Allow newer versions for compatibility
 allow-newer:
