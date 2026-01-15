@@ -36,6 +36,8 @@ Library
                    , Data.X509.TCG.Util.Display
                    , Data.X509.TCG.Util.CLI
                    , Data.X509.TCG.Util.OID
+                   , Data.X509.TCG.Util.Paccor
+                   , Data.X509.TCG.Util.HardwareCollector
   Build-depends:     base >= 4 && < 5
                    , aeson
                    , base64-bytestring
@@ -56,6 +58,7 @@ Library
                    , asn1-encoding
                    , tcg-platform-cert
                    , yaml
+                   , platform-hardware-info
   GHC-Options:       -Wall
 
 Executable           tcg-platform-cert-util
@@ -68,6 +71,8 @@ Executable           tcg-platform-cert-util
                    , Data.X509.TCG.Util.Config
                    , Data.X509.TCG.Util.Display
                    , Data.X509.TCG.Util.OID
+                   , Data.X509.TCG.Util.Paccor
+                   , Data.X509.TCG.Util.HardwareCollector
   Buildable:         True
   Build-depends:     base >= 4 && < 5
                    , aeson
@@ -89,6 +94,7 @@ Executable           tcg-platform-cert-util
                    , asn1-encoding
                    , tcg-platform-cert
                    , yaml
+                   , platform-hardware-info
   GHC-Options:       -Wall
 
 Test-Suite           test-tcg-platform-cert-util

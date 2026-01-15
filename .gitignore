@@ -2,3 +2,6 @@ dist/
 .stack-work/
 *.hi
 *.o
+
+# Inhouse build configuration
+stack-inhouse.yaml

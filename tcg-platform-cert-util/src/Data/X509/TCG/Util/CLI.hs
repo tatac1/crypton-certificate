@@ -21,6 +21,7 @@ module Data.X509.TCG.Util.CLI
     doShow,
     doValidate,
     doComponents,
+    doConvert,
     createExampleConfig,
 
     -- * Option Parsers
@@ -29,6 +30,7 @@ module Data.X509.TCG.Util.CLI
     optionsShow,
     optionsValidate,
     optionsComponents,
+    optionsConvert,
 
     -- * Utility Functions
     extractOpt,
@@ -52,6 +54,7 @@ import Data.X509.TCG.Util.ASN1
 import Data.X509.TCG.Util.Certificate
 import Data.X509.TCG.Util.Config
 import Data.X509.TCG.Util.Display
+import Data.X509.TCG.Util.Paccor
 import System.Console.GetOpt
 import System.Exit
 
@@ -77,6 +80,9 @@ data TCGOpts
   | ConfigFile String
   | -- Hash algorithm option
     HashAlgorithm String
+  | -- Convert options
+    FromPaccor
+  | InputFile String
   deriving (Show, Eq)
 
 -- | Generate a new platform certificate
@@ -91,7 +97,7 @@ doGenerate opts _ = do
   -- Check for config file option first
   let configFile = extractOpt "config" (\case ConfigFile f -> Just f; _ -> Nothing) opts ""
 
-  -- Load configuration from YAML file or command line options
+  -- Load configuration from config file (YAML or paccor JSON) or command line options
   (manufacturer, model, version, serial, _keySize, _validityDays, components, mExtAttrs) <-
     if null configFile
       then do
@@ -104,9 +110,9 @@ doGenerate opts _ = do
             validityDays = extractOpt "validity" (\case ValidityDays d -> Just (show d); _ -> Nothing) opts "365"
         return (manufacturer, model, version, serial, keySize, validityDays, [], Nothing)
       else do
-        -- Load from YAML config file
+        -- Load from config file (auto-detect YAML or paccor JSON format)
         putStrLn $ "Loading configuration from: " ++ configFile
-        result <- loadConfig configFile
+        result <- loadAnyConfig configFile
         case result of
           Left err -> do
             putStrLn $ "Error loading config file: " ++ err
@@ -627,6 +633,64 @@ optionsComponents =
     Option ['h'] ["help"] (NoArg Help) "show help"
   ]
 
+optionsConvert :: [OptDescr TCGOpts]
+optionsConvert =
+  [ Option ['o'] ["output"] (ReqArg Output "FILE") "output YAML file",
+    Option [] ["from-paccor"] (NoArg FromPaccor) "input is paccor JSON format (auto-detected if not specified)",
+    Option ['h'] ["help"] (NoArg Help) "show help"
+  ]
+
+-- | Convert paccor JSON to YAML format
+doConvert :: [TCGOpts] -> [String] -> IO ()
+doConvert opts files = do
+  when (Help `elem` opts) $ do
+    putStrLn $ usageInfo "usage: tcg-platform-cert-util convert [options] <input-file>" optionsConvert
+    putStrLn ""
+    putStrLn "Converts paccor JSON format to tcg-platform-cert-util YAML format."
+    putStrLn ""
+    putStrLn "paccor is the NSA Cybersecurity Platform Attribute Certificate Creator."
+    putStrLn "See: https://github.com/nsacyber/paccor"
+    putStrLn ""
+    putStrLn "Examples:"
+    putStrLn "  tcg-platform-cert-util convert device.json -o platform.yaml"
+    putStrLn "  tcg-platform-cert-util convert --from-paccor device.json"
+    exitSuccess
+
+  when (null files) $ do
+    putStrLn "Error: No input file specified"
+    putStrLn ""
+    putStrLn $ usageInfo "usage: tcg-platform-cert-util convert [options] <input-file>" optionsConvert
+    exitFailure
+
+  let inputFile = head files
+      outputFile = extractOpt "output" (\case Output o -> Just o; _ -> Nothing) opts ""
+      defaultOutput = replaceExtension inputFile ".yaml"
+      finalOutput = if null outputFile then defaultOutput else outputFile
+
+  putStrLn $ "Converting: " ++ inputFile
+  putStrLn $ "Output: " ++ finalOutput
+
+  -- Load and convert
+  result <- loadPaccorConfig inputFile
+  case result of
+    Left err -> do
+      putStrLn $ "Error parsing paccor JSON: " ++ err
+      exitFailure
+    Right paccorConfig -> do
+      savePaccorAsYaml paccorConfig finalOutput
+      let platform = paccorPlatform paccorConfig
+          componentCount = maybe 0 length (paccorComponents paccorConfig)
+      putStrLn ""
+      putStrLn "Conversion successful!"
+      putStrLn $ "  Platform: " ++ show (platformManufacturerStr platform) ++ " " ++ show (platformModel platform)
+      putStrLn $ "  Components: " ++ show componentCount
+  where
+    -- Replace file extension
+    replaceExtension :: FilePath -> String -> FilePath
+    replaceExtension path newExt =
+      let base = reverse $ drop 1 $ dropWhile (/= '.') $ reverse path
+      in if null base then path ++ newExt else base ++ newExt
+
 -- | Usage information
 usage :: IO ()
 usage = do
@@ -639,6 +703,7 @@ usage = do
   putStrLn "  validate       : Validate a certificate"
   putStrLn "  components     : Show component information"
   putStrLn "  create-config  : Create example YAML configuration file"
+  putStrLn "  convert        : Convert paccor JSON to YAML format"
   putStrLn "  help           : Show this help"
   putStrLn ""
   putStrLn "Use 'tcg-platform-cert-util <command> --help' for command-specific options."

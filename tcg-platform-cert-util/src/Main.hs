@@ -13,6 +13,7 @@
 -- - validate: Validate certificate compliance
 -- - components: Extract component information
 -- - create-config: Create example YAML configuration
+-- - convert: Convert paccor JSON to YAML format
 
 module Main where
 
@@ -46,6 +47,9 @@ createConfigMain _ = do
   putStrLn "  filename: Output YAML file (default: platform-config.yaml)"
   exitFailure
 
+convertMain :: [String] -> IO ()
+convertMain = getoptMain optionsConvert $ \o n -> doConvert o n
+
 -- | Main entry point
 main :: IO ()
 main = do
@@ -58,6 +62,7 @@ main = do
     "validate" : as -> validateMain as
     "components" : as -> componentsMain as
     "create-config" : as -> createConfigMain as
+    "convert" : as -> convertMain as
     "help" : _ -> usage
     "--help" : _ -> usage
     _ -> do

@@ -20,6 +20,12 @@ module Data.X509.TCG.Util.Config
   , AddressConfig(..)
   , URIReferenceConfig(..)
   , SecurityAssertionsConfig(..)
+  , ComponentPlatformCertConfig(..)
+  , AttributeCertIdConfig(..)
+  , GenericCertIdConfig(..)
+  , IssuerNameConfig(..)
+  , PropertyConfig(..)
+  , ComponentClassConfig(..)
 
   -- * Configuration Loading
   , loadConfig
@@ -109,14 +115,113 @@ instance FromJSON URIReferenceConfig where
 instance ToJSON URIReferenceConfig where
   toJSON = genericToJSON uriOptions
 
+-- | Issuer Name component (for Distinguished Name)
+data IssuerNameConfig = IssuerNameConfig
+  { inOid :: String    -- OID like "2.5.4.6" (Country), "2.5.4.10" (Organization)
+  , inValue :: String  -- The actual value
+  } deriving (Show, Eq, Generic)
+
+issuerNameOptions :: Options
+issuerNameOptions = defaultOptions { fieldLabelModifier = dropPrefix "in" }
+
+instance FromJSON IssuerNameConfig where
+  parseJSON = genericParseJSON issuerNameOptions
+instance ToJSON IssuerNameConfig where
+  toJSON = genericToJSON issuerNameOptions
+
+-- | Attribute Certificate Identifier (hash-based)
+data AttributeCertIdConfig = AttributeCertIdConfig
+  { acidHashAlgorithm :: String     -- OID or name: "sha256", "sha384"
+  , acidHashValue :: String         -- Hex-encoded hash over signature value
+  } deriving (Show, Eq, Generic)
+
+attrCertIdOptions :: Options
+attrCertIdOptions = defaultOptions { fieldLabelModifier = dropPrefix "acid" }
+
+instance FromJSON AttributeCertIdConfig where
+  parseJSON = genericParseJSON attrCertIdOptions
+instance ToJSON AttributeCertIdConfig where
+  toJSON = genericToJSON attrCertIdOptions
+
+-- | Generic Certificate Identifier (issuer + serial)
+data GenericCertIdConfig = GenericCertIdConfig
+  { gcidIssuer :: [IssuerNameConfig]  -- Distinguished name components
+  , gcidSerial :: String              -- Certificate serial number
+  } deriving (Show, Eq, Generic)
+
+genericCertIdOptions :: Options
+genericCertIdOptions = defaultOptions { fieldLabelModifier = dropPrefix "gcid" }
+
+instance FromJSON GenericCertIdConfig where
+  parseJSON = genericParseJSON genericCertIdOptions
+instance ToJSON GenericCertIdConfig where
+  toJSON = genericToJSON genericCertIdOptions
+
+-- | Platform Certificate reference for a component
+-- References another Platform Certificate that attests this component
+data ComponentPlatformCertConfig = ComponentPlatformCertConfig
+  { cpcAttributeCertId :: Maybe AttributeCertIdConfig   -- Hash-based identifier
+  , cpcGenericCertId :: Maybe GenericCertIdConfig       -- Issuer+Serial identifier
+  } deriving (Show, Eq, Generic)
+
+platformCertRefOptions :: Options
+platformCertRefOptions = defaultOptions { fieldLabelModifier = dropPrefix "cpc" }
+
+instance FromJSON ComponentPlatformCertConfig where
+  parseJSON = genericParseJSON platformCertRefOptions
+instance ToJSON ComponentPlatformCertConfig where
+  toJSON = genericToJSON platformCertRefOptions
+
+-- | Component Class configuration with registry and value
+-- Per TCG Platform Certificate Profile, ComponentClass contains:
+-- - componentClassRegistry: OID identifying the registry (e.g., "2.23.133.18.3.1" for TCG)
+-- - componentClassValue: The class value within that registry
+data ComponentClassConfig = ComponentClassConfig
+  { cccRegistry :: String    -- OID like "2.23.133.18.3.1" (TCG Registry)
+  , cccValue :: String       -- Hex value like "00030003"
+  } deriving (Show, Eq, Generic)
+
+componentClassOptions :: Options
+componentClassOptions = defaultOptions { fieldLabelModifier = dropPrefix "ccc" }
+
+instance FromJSON ComponentClassConfig where
+  parseJSON = genericParseJSON componentClassOptions
+instance ToJSON ComponentClassConfig where
+  toJSON = genericToJSON componentClassOptions
+
+-- | Platform Property configuration (name-value pairs)
+-- Per TCG Platform Certificate Profile v1.1, PlatformProperties contains:
+-- - propertyName: Name of the property
+-- - propertyValue: Value of the property
+-- - propertyStatus: Optional status for Delta certificates (ADDED, MODIFIED, REMOVED)
+data PropertyConfig = PropertyConfig
+  { propName :: String
+  , propValue :: String
+  , propStatus :: Maybe String   -- "ADDED", "MODIFIED", "REMOVED" for Delta certs
+  } deriving (Show, Eq, Generic)
+
+propertyOptions :: Options
+propertyOptions = defaultOptions { fieldLabelModifier = dropPrefix "prop" }
+
+instance FromJSON PropertyConfig where
+  parseJSON = genericParseJSON propertyOptions
+instance ToJSON PropertyConfig where
+  toJSON = genericToJSON propertyOptions
+
 -- | YAML Configuration for Platform Certificate components
 data ComponentConfig = ComponentConfig
-  { ccClass :: String
+  { ccComponentClass :: Maybe ComponentClassConfig  -- Full component class with registry
+  , ccClass :: String                    -- Simple class value (for backwards compatibility)
   , ccManufacturer :: String
   , ccModel :: String
-  , ccSerial :: Maybe String           -- Optional per TCG spec
-  , ccRevision :: Maybe String         -- Optional per TCG spec
-  , ccAddresses :: Maybe [AddressConfig]  -- Network addresses (MAC, etc.)
+  , ccSerial :: Maybe String             -- Optional per TCG spec
+  , ccRevision :: Maybe String           -- Optional per TCG spec
+  , ccManufacturerId :: Maybe String     -- Manufacturer OID (Private Enterprise Number)
+  , ccFieldReplaceable :: Maybe Bool     -- Field replaceable flag
+  , ccAddresses :: Maybe [AddressConfig] -- Network addresses (MAC, etc.)
+  , ccPlatformCert :: Maybe ComponentPlatformCertConfig  -- Reference to component's Platform Certificate
+  , ccPlatformCertUri :: Maybe URIReferenceConfig        -- URI to component's Platform Certificate
+  , ccStatus :: Maybe String             -- "ADDED", "MODIFIED", "REMOVED" for Delta certs
   } deriving (Show, Eq, Generic)
 
 instance FromJSON ComponentConfig where
@@ -130,11 +235,16 @@ data PlatformCertConfig = PlatformCertConfig
   , pccModel :: String
   , pccVersion :: String
   , pccSerial :: String
+  , pccManufacturerId :: Maybe String   -- Platform Manufacturer OID (Private Enterprise Number)
   , pccValidityDays :: Maybe Int
   , pccKeySize :: Maybe Int
   , pccComponents :: [ComponentConfig]
-  -- Extended fields
+  , pccProperties :: Maybe [PropertyConfig]  -- Platform properties (name-value pairs)
+  -- URI References
   , pccPlatformConfigUri :: Maybe URIReferenceConfig  -- Platform Config URI with optional hash
+  , pccComponentsUri :: Maybe URIReferenceConfig      -- External components list URI
+  , pccPropertiesUri :: Maybe URIReferenceConfig      -- External properties list URI
+  -- Extended fields
   , pccPlatformClass :: Maybe String
   , pccSpecificationVersion :: Maybe String
   , pccMajorVersion :: Maybe Int
@@ -255,8 +365,22 @@ createExampleConfig file = do
         , pccModel = "Test Platform"
         , pccVersion = "1.0"
         , pccSerial = "TEST001"
+        , pccManufacturerId = Just "1.3.6.1.4.1.99999"  -- Example Private Enterprise Number
         , pccValidityDays = Just 365
         , pccKeySize = Just 2048
+        -- Platform properties (name-value pairs)
+        , pccProperties = Just
+            [ PropertyConfig
+                { propName = "firmware.version"
+                , propValue = "1.2.3"
+                , propStatus = Nothing
+                }
+            , PropertyConfig
+                { propName = "bios.vendor"
+                , propValue = "Test BIOS Inc."
+                , propStatus = Nothing
+                }
+            ]
         -- Platform Config URI with optional hash for integrity verification
         -- Per TCG Platform Certificate Profile v1.1, URIReference includes hashAlgorithm and hashValue
         , pccPlatformConfigUri = Just URIReferenceConfig
@@ -265,6 +389,8 @@ createExampleConfig file = do
             -- Example: SHA-256 hash of the referenced document (base64-encoded)
             , uriHashValue = Just "YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoxMjM0NTY="
             }
+        , pccComponentsUri = Nothing    -- External components list URI
+        , pccPropertiesUri = Nothing    -- External properties list URI
         , pccPlatformClass = Just "00000001"
         , pccSpecificationVersion = Just "1.1"
         , pccMajorVersion = Just 1
@@ -297,28 +423,55 @@ createExampleConfig file = do
             }
         , pccComponents =
             [ ComponentConfig
-                { ccClass = "00030003"  -- TCG Registry: Motherboard
+                { ccComponentClass = Just ComponentClassConfig
+                    { cccRegistry = "2.23.133.18.3.1"  -- TCG Component Class Registry
+                    , cccValue = "00030003"            -- Motherboard
+                    }
+                , ccClass = "00030003"  -- TCG Registry: Motherboard (backwards compatibility)
                 , ccManufacturer = "Test Corporation"
                 , ccModel = "Test Platform Motherboard"
                 , ccSerial = Just "MB-TEST001"
                 , ccRevision = Just "1.0"
+                , ccManufacturerId = Just "1.3.6.1.4.1.99999"
+                , ccFieldReplaceable = Just True
                 , ccAddresses = Nothing
+                , ccPlatformCert = Nothing
+                , ccPlatformCertUri = Nothing
+                , ccStatus = Nothing
                 }
             , ComponentConfig
-                { ccClass = "00010002"  -- TCG Registry: CPU
+                { ccComponentClass = Just ComponentClassConfig
+                    { cccRegistry = "2.23.133.18.3.1"
+                    , cccValue = "00010002"            -- CPU
+                    }
+                , ccClass = "00010002"  -- TCG Registry: CPU
                 , ccManufacturer = "Intel Corporation"
                 , ccModel = "Xeon E5-2680"
                 , ccSerial = Just "CPU-TEST001"
                 , ccRevision = Just "Rev C0"
+                , ccManufacturerId = Just "1.3.6.1.4.1.343"  -- Intel's Private Enterprise Number
+                , ccFieldReplaceable = Just False
                 , ccAddresses = Nothing
+                , ccPlatformCert = Nothing
+                , ccPlatformCertUri = Nothing
+                , ccStatus = Nothing
                 }
             , ComponentConfig
-                { ccClass = "00060004"  -- TCG Registry: DRAM Memory
+                { ccComponentClass = Just ComponentClassConfig
+                    { cccRegistry = "2.23.133.18.3.1"
+                    , cccValue = "00060004"            -- DRAM Memory
+                    }
+                , ccClass = "00060004"  -- TCG Registry: DRAM Memory
                 , ccManufacturer = "Samsung"
                 , ccModel = "DDR4-3200"
                 , ccSerial = Just "MEM-TEST001"
                 , ccRevision = Just "1.35V"
+                , ccManufacturerId = Just "1.3.6.1.4.1.236"  -- Samsung's Private Enterprise Number
+                , ccFieldReplaceable = Just True
                 , ccAddresses = Nothing
+                , ccPlatformCert = Nothing
+                , ccPlatformCertUri = Nothing
+                , ccStatus = Nothing
                 }
             ]
         }
