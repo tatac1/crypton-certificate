@@ -11,6 +11,9 @@ packages:
 - tcg-platform-cert-validation
 - tcg-platform-cert-util
 
+extra-deps:
+- crypton-pem-0.3.0
+
 nix:
   pure: false
 
