@@ -1,0 +1,842 @@
+ITUPublications
+
+International Telecommunication Union
+
+Recommendations
+
+Standardization Sector
+
+Recommendation
+ITU-T X.509 (2019) Amd. 1 (10/2024)
+SERIES X: Data networks, open system communications
+and security
+Directory
+
+Information technology – Open Systems
+Interconnection – The Directory: Public-key and
+attribute certificate frameworks
+Amendment 1: Miscellaneous enhancements
+
+ITU-T X-SERIES RECOMMENDATIONS
+Data networks, open system communications and security
+PUBLIC DATA NETWORKS
+OPEN SYSTEMS INTERCONNECTION
+INTERWORKING BETWEEN NETWORKS
+MESSAGE HANDLING SYSTEMS
+DIRECTORY
+OSI NETWORKING AND SYSTEM ASPECTS
+OSI MANAGEMENT
+SECURITY
+OSI APPLICATIONS
+OPEN DISTRIBUTED PROCESSING
+INFORMATION AND NETWORK SECURITY
+SECURE APPLICATIONS AND SERVICES (I)
+CYBERSPACE SECURITY
+SECURE APPLICATIONS AND SERVICES (II)
+CYBERSECURITY INFORMATION EXCHANGE
+CLOUD COMPUTING SECURITY
+QUANTUM COMMUNICATION
+DATA SECURITY
+INTERNATIONAL MOBILE TELECOMMUNICATIONS (IMT) SECURITY
+METAVERSE AND DIGITAL TWIN SECURITY
+SOFTWARE SUPPLY CHAIN SECURITY
+ARTIFICIAL INTELLIGENCE (AI) / MACHINE LEARNING (ML) SECURITY
+For further details, please refer to the list of ITU-T Recommendations.
+
+X.1-X.199
+X.200-X.299
+X.300-X.399
+X.400-X.499
+X.500-X.599
+X.600-X.699
+X.700-X.799
+X.800-X.849
+X.850-X.899
+X.900-X.999
+X.1000-X.1099
+X.1100-X.1199
+X.1200-X.1299
+X.1300-X.1499
+X.1500-X.1599
+X.1600-X.1699
+X.1700-X.1729
+X.1750-X.1799
+X.1800-X.1839
+X.2000-X.2199
+X.2150-X.2199
+X.2200-X.2249
+
+INTERNATIONAL STANDARD ISO/IEC 9594-8
+RECOMMENDATION ITU-T X.509
+
+Information technology – Open Systems Interconnection – The Directory: Public-key and
+attribute certificate frameworks
+Amendment 1
+Miscellaneous enhancements
+Summary
+Recommendation ITU-T X.509 (2019) | International Standard ISO/IEC 9594-8:2020, Amendment 1 introduces text
+updates to facilitate separation between cybersecurity ASN.1 modules and directory ASN.1 modules.
+History *
+Edition
+1.0
+2.0
+3.0
+3.1
+3.2
+3.3
+3.4
+3.5
+3.6
+4.0
+4.1
+4.2
+4.3
+4.3
+4.4
+5.0
+5.1
+5.2
+5.3
+5.4
+6.0
+6.1
+6.2
+6.3
+7.0
+7.1
+7.2
+7.3
+8.0
+9.0
+9.1
+9.2
+9.3
+
+*
+
+Recommendation
+ITU-T X.509
+ITU-T X.509
+ITU-T X.509
+ITU-T X.509 (1997) Technical Cor. 1
+ITU-T X.509 (1997) Technical Cor. 2
+ITU-T X.509 (1997) Technical Cor. 3
+ITU-T X.509 (1997) Technical Cor. 4
+ITU-T X.509 (1997) Technical Cor. 5
+ITU-T X.509 (1997) Technical Cor. 6
+ITU-T X.509
+ITU-T X.509 (2000) Technical Cor. 1
+ITU-T X.509 (2000) Technical Cor. 2
+ITU-T X.509 (2000) Technical Cor. 3
+ITU-T X.509 (2000) Technical Cor. 3
+ITU-T X.509 (2000) Technical Cor. 4
+ITU-T X.509
+ITU-T X.509 (2005) Cor. 1
+ITU-T X.509 (2005) Cor. 2
+ITU-T X.509 (2005) Cor. 3
+ITU-T X.509 (2005) Cor. 4
+ITU-T X.509
+ITU-T X.509 (2008) Cor. 1
+ITU-T X.509 (2008) Cor. 2
+ITU-T X.509 (2008) Cor. 3
+ITU-T X.509
+ITU-T X.509 (2012) Cor. 1
+ITU-T X.509 (2012) Cor. 2
+ITU-T X.509 (2012) Cor. 3
+ITU-T X.509
+ITU-T X.509
+ITU-T X.509 (2019) Cor. 1
+ITU-T X.509 (2019) Cor. 2
+ITU-T X.509 (2019) Amd. 1
+
+Approval
+1988-11-25
+1993-11-16
+1997-08-09
+2000-03-31
+2001-02-02
+2001-10-29
+2002-04-13
+2003-02-13
+2004-04-29
+2000-03-31
+2001-10-29
+2002-04-13
+2003-02-13
+2004-04-29
+2007-01-13
+2005-08-29
+2007-01-13
+2008-11-13
+2011-02-13
+2012-04-13
+2008-11-13
+2011-02-13
+2012-04-13
+2012-10-14
+2012-10-14
+2015-05-29
+2016-04-29
+2016-10-14
+2016-10-14
+2019-10-14
+2021-10-14
+2023-10-29
+2024-10-29
+
+Study Group
+7
+7
+7
+7
+7
+17
+17
+17
+7
+7
+17
+17
+17
+17
+17
+17
+17
+17
+17
+17
+17
+17
+17
+17
+17
+17
+17
+17
+17
+17
+17
+17
+
+Unique ID
+11.1002/1000/2999
+11.1002/1000/3000
+11.1002/1000/4123
+11.1002/1000/5033
+11.1002/1000/5311
+11.1002/1000/5559
+11.1002/1000/6025
+11.1002/1000/6236
+11.1002/1000/7285
+11.1002/1000/5034
+11.1002/1000/5560
+11.1002/1000/6026
+11.1002/1000/15258
+11.1002/1000/7284
+11.1002/1000/8637
+11.1002/1000/8501
+11.1002/1000/9051
+11.1002/1000/9591
+11.1002/1000/11042
+11.1002/1000/11577
+11.1002/1000/9590
+11.1002/1000/11043
+11.1002/1000/11578
+11.1002/1000/11736
+11.1002/1000/11735
+11.1002/1000/12474
+11.1002/1000/12844
+11.1002/1000/13032
+11.1002/1000/13031
+11.1002/1000/14033
+11.1002/1000/14791
+11.1002/1000/15705
+11.1002/1000/16172
+
+To access the Recommendation, type the URL https://handle.itu.int/ in the address field of your web browser, followed by the
+Recommendation's unique ID.
+
+Rec. ITU-T X.509 (2019) Amd. 1 (10/2024)
+
+i
+
+FOREWORD
+The International Telecommunication Union (ITU) is the United Nations specialized agency in the field of
+telecommunications, and information and communication technologies (ICTs). The ITU Telecommunication
+Standardization Sector (ITU-T) is a permanent organ of ITU. ITU-T is responsible for studying technical,
+operating and tariff questions and issuing Recommendations on them with a view to standardizing
+telecommunications on a worldwide basis.
+The World Telecommunication Standardization Assembly (WTSA), which meets every four years, establishes
+the topics for study by the ITU-T study groups which, in turn, produce Recommendations on these topics.
+The approval of ITU-T Recommendations is covered by the procedure laid down in WTSA Resolution 1.
+In some areas of information technology which fall within ITU-T's purview, the necessary standards are
+prepared on a collaborative basis with ISO and IEC.
+
+NOTE
+In this Recommendation, the expression "Administration" is used for conciseness to indicate both a
+telecommunication administration and a recognized operating agency.
+Compliance with this Recommendation is voluntary. However, the Recommendation may contain certain
+mandatory provisions (to ensure, e.g., interoperability or applicability) and compliance with the
+Recommendation is achieved when all of these mandatory provisions are met. The words "shall" or some other
+obligatory language such as "must" and the negative equivalents are used to express requirements. The use of
+such words does not suggest that compliance with the Recommendation is required of any party.
+
+INTELLECTUAL PROPERTY RIGHTS
+ITU draws attention to the possibility that the practice or implementation of this Recommendation may involve
+the use of a claimed Intellectual Property Right. ITU takes no position concerning the evidence, validity or
+applicability of claimed Intellectual Property Rights, whether asserted by ITU members or others outside of
+the Recommendation development process.
+As of the date of approval of this Recommendation, ITU had not received notice of intellectual property,
+protected by patents/software copyrights, which may be required to implement this Recommendation.
+However, implementers are cautioned that this may not represent the latest information and are therefore
+strongly urged to consult the appropriate ITU-T databases available via the ITU-T website at
+https://www.itu.int/ITU-T/ipr/.
+
+© ITU 2025
+All rights reserved. No part of this publication may be reproduced, by any means whatsoever, without the prior
+written permission of ITU.
+
+ii
+
+Rec. ITU-T X.509 (2019) Amd. 1 (10/2024)
+
+CONTENTS
+Page
+1)
+
+Clause 13.2.13 .....................................................................................................................................
+
+1
+
+2)
+
+Annex A, clause A.1............................................................................................................................
+
+1
+
+3)
+
+Annex A, clause A.2............................................................................................................................
+
+2
+
+4)
+
+Annex A, clause A.3............................................................................................................................
+
+3
+
+5)
+
+Annex B ..............................................................................................................................................
+
+3
+
+6)
+
+Annex C, clause C.2 ............................................................................................................................
+
+4
+
+7)
+
+Annex D ..............................................................................................................................................
+
+5
+
+Rec. ITU-T X.509 (2019) Amd. 1 (10/2024)
+
+iii
+
+ISO/IEC 9594-8:2020/Amd.1:2025 (E)
+INTERNATIONAL STANDARD
+ITU-T RECOMMENDATION
+
+Information technology – Open Systems Interconnection – The Directory: Public-key and
+attribute certificate frameworks
+Amendment 1
+Miscellaneous enhancements
+1)
+
+Clause 13.2.13
+
+Add the following clause with a new attribute:
+13.2.13 Sequence number attribute type
+A value of attribute type sequenceNumber is used for holding a sequence number in form of a non-negative integer.
+sequenceNumber ATTRIBUTE ::= {
+WITH SYNTAX
+INTEGER (0..MAX)
+EQUALITY MATCHING RULE integerMatch
+SINGLE VALUE
+TRUE
+LDAP-SYNTAX
+integer.&id
+LDAP-NAME
+{"Sequence number"}
+ID
+id-at-sequenceNumber }
+This attribute type may be used to generate an RDN for naming a directory entry holding a public-key or attribute
+certificate. It is required that the certificate sequence number is non-negative.
+
+2)
+
+Annex A, clause A.1
+
+Replace the import section of clause A.1 with:
+-- A.1 - Authentication framework module
+AuthenticationFramework
+{joint-iso-itu-t ds(5) module(1) authenticationFramework(7) 10}
+DEFINITIONS ::=
+BEGIN
+-- EXPORTS All
+/*
+The types and values defined in this module are exported for use in the other
+ASN.1
+modules contained within the Directory Specifications, and for the use of other
+applications which will use them to access Directory services. Other applications
+may
+use them for their own purposes, but this will not constrain extensions and
+modifications needed to maintain or improve the Directory service.
+*/
+IMPORTS
+id-asx, id-at, id-ldx, id-lsx, id-mr, id-nf, id-oa, id-oc, id-sc,
+ATTRIBUTE, Attribute{}, commonName, DistinguishedName, Name, NAME-FORM, OBJECTCLASS,
+octetString, octetStringMatch, SYNTAX-NAME, top, UnboundedDirectoryString
+FROM UsefulDefinitions
+{joint-iso-itu-t ds(5) module(1) usefulDefinitions(0) 10} WITH SUCCESSORS
+/*
+ATTRIBUTE, Attribute{}, DistinguishedName, --distinguishedNameMatch, MATCHINGRULE, -- Name, NAME-FORM, OBJECT-CLASS,
+-- objectIdentifierMatch, RelativeDistinguishedName, -- SYNTAX-NAME, top
+
+Rec. ITU-T X.509 (2019) Amd. 1 (10/2024)
+
+1
+
+ISO/IEC 9594-8:2020/Amd.1:2025 (E)
+FROM InformationFramework
+{joint-iso-itu-t
+ds(5)
+module(1)
+informationFramework(1)
+10}
+WITH
+SUCCESSORS
+--bitStringMatch, boolean, booleanMatch, caseExactMatch, -- commonName,
+-- directoryString, generalizedTime,
+-- generalizedTimeMatch, generalizedTimeOrderingMatch, integer, integerMatch,
+-- integerOrderingMatch, -- octetString, octetStringMatch,
+UnboundedDirectoryString, UniqueIdentifier --, uri
+FROM SelectedAttributeTypes
+{joint-iso-itu-t ds(5) module(1) selectedAttributeTypes(5) 10} WITH
+SUCCESSORS
+*/
+algorithmIdentifierMatch, certificateExactMatch, certificateListExactMatch,
+certificatePairExactMatch,
+CertificatePoliciesSyntax,
+CertPolicyId,
+GeneralNames,
+KeyUsage, pkiPathMatch, policyMatch,
+CertificateAssertion, CertificateExactAssertion, CertificateListAssertion,
+CertificateListExactAssertion, CertificatePairAssertion,
+CertificatePairExactAssertion
+FROM CertificateExtensions
+{joint-iso-itu-t ds(5) module(1) certificateExtensions(26) 10} WITH
+SUCCESSORS ;
+
+3)
+
+Annex A, clause A.2
+
+Replace the import section of clause A.2 with:
+-- A.2 - Certificate extensions module
+CertificateExtensions
+{joint-iso-itu-t ds(5) module(1) certificateExtensions(26) 10}
+DEFINITIONS IMPLICIT TAGS ::=
+BEGIN
+-- EXPORTS ALL
+IMPORTS
+id-at, id-ce, id-ldx, id-mr,
+ATTRIBUTE, Attribute{}, MATCHING-RULE, Name, RelativeDistinguishedName, SYNTAXNAME,
+UnboundedDirectoryString
+FROM UsefulDefinitions
+{joint-iso-itu-t ds(5) module(1) usefulDefinitions(0) 10} WITH SUCCESSORS
+/*
+Name, RelativeDistinguishedName, Attribute{}, MATCHING-RULE,
+SupportedAttributes, SYNTAX-NAME
+FROM InformationFramework
+{joint-iso-itu-t ds(5) module(1) informationFramework(1) 9} WITH SUCCESSORS
+*/
+AvlSerialNumber,
+CertificateSerialNumber,
+CertificateList,
+AlgorithmIdentifier{},
+EXTENSION, Time, PolicyID, SupportedAlgorithms
+FROM AuthenticationFramework
+{joint-iso-itu-t ds(5) module(1) authenticationFramework(7) 10} WITH
+SUCCESSORS
+/*
+UnboundedDirectoryString
+FROM SelectedAttributeTypes
+{joint-iso-itu-t
+ds(5)
+module(1)
+selectedAttributeTypes(5)
+9}
+WITH
+SUCCESSORS
+*/
+ORAddress
+FROM PkiPmiExternalDataTypes
+2
+
+Rec. ITU-T X.509 (2019) Amd. 1 (10/2024)
+
+ISO/IEC 9594-8:2020/Amd.1:2025 (E)
+{joint-iso-itu-t
+SUCCESSORS ;
+
+4)
+
+ds(5)
+
+module(1)
+
+pkiPmiExternalDataTypes(40)
+
+10}
+
+WITH
+
+Annex A, clause A.3
+
+Replace the import section of clause A.3 with:
+--
+
+A.3 - Attribute Certificate Framework module
+
+AttributeCertificateDefinitions
+{joint-iso-itu-t ds(5) module(1) attributeCertificateDefinitions(32) 10}
+DEFINITIONS IMPLICIT TAGS ::=
+BEGIN
+-- EXPORTS ALL
+IMPORTS
+id-asx, id-at, id-ce, id-mr, id-oc,
+ATTRIBUTE, Attribute{}, AttributeType, AttributeTypeAndValue, directoryString,
+MATCHING-RULE,
+OBJECT-CLASS, SYNTAX-NAME, top, TimeSpecification,
+UnboundedDirectoryString
+FROM UsefulDefinitions
+{joint-iso-itu-t ds(5) module(1) usefulDefinitions(0) 10} WITH SUCCESSORS
+/*
+The below ASN.1 items have been moved from the InformationFrameword module
+to the UsefulDefinitions module.
+ATTRIBUTE, Attribute{}, AttributeType, AttributeTypeAndValue, MATCHING-RULE,
+Name,
+OBJECT-CLASS, RelativeDistinguishedName, SupportedAttributes, SYNTAX-NAME, top
+FROM InformationFramework
+{joint-iso-itu-t ds(5) module(1) informationFramework(1) 9} WITH SUCCESSORS
+*/
+ALGORITHM,
+AlgorithmIdentifier,
+Certificate,
+CertificateList,
+CertificateSerialNumber,
+EXTENSION, Extensions, InfoSyntax, PolicySyntax, SIGNED{}, SupportedAlgorithms,
+UniqueIdentifier, x509CertificateList
+FROM AuthenticationFramework
+{joint-iso-itu-t ds(5) module(1) authenticationFramework(7) 10} WITH
+SUCCESSORS
+/*
+TimeSpecification, UnboundedDirectoryString, UniqueIdentifier
+FROM SelectedAttributeTypes
+{joint-iso-itu-t
+ds(5)
+module(1)
+selectedAttributeTypes(5)
+9}
+WITH
+SUCCESSORS
+*/
+certificateListExactMatch, GeneralName, GeneralNames, NameConstraintsSyntax
+FROM CertificateExtensions
+{joint-iso-itu-t ds(5) module(1) certificateExtensions(26) 10} WITH
+SUCCESSORS ;
+
+5)
+
+Annex B
+
+Replace the import section of Annex B, AlgorithmObjectIdentifiers module with:
+AlgorithmObjectIdentifiers
+{joint-iso-itu-t
+algorithmObjectIdentifiers(8) 10}
+DEFINITIONS ::=
+BEGIN
+
+ds(5)
+
+module(1)
+
+Rec. ITU-T X.509 (2019) Amd. 1 (10/2024)
+
+3
+
+ISO/IEC 9594-8:2020/Amd.1:2025 (E)
+-- EXPORTS All
+/*
+The values defined in this module are primarily taking from various specifications
+and
+collected here for easy reference by other specifcations.
+Wen values are copied form an IETF RFC, the IETF RFC number is shown.
+When values are copied from the NIST Computer Security Objects Register (CSOR),
+the label CSOR is used.
+*/
+IMPORTS
+algorithm
+FROM UsefulDefinitions
+{joint-iso-itu-t ds(5) module(1) usefulDefinitions(0) 10} WITH SUCCESSORS
+ALGORITHM, AlgorithmIdentifier{}, SupportedAlgorithms, SupportedCurves
+FROM AuthenticationFramework
+{joint-iso-itu-t ds(5) module(1) authenticationFramework(7) 10}
+SUCCESSORS;
+
+6)
+
+WITH
+
+Annex C, clause C.2
+
+Replace the import section of clause C.2 with:
+ExtensionAttributes {joint-iso-itu-t ds(5) module(1) extensionAttributes(41) 10}
+DEFINITIONS ::=
+BEGIN
+-- EXPORTS All
+IMPORTS
+-- from Rec. ITU-T X.501 | ISO/IEC 9594-2
+id-ce, ATTRIBUTE, SYNTAX-NAME
+FROM UsefulDefinitions
+{joint-iso-itu-t ds(5) module(1) usefulDefinitions(0) 10} WITH SUCCESSORS
+-- from Rec. ITU-T X.509 | ISO/IEC 9594-8
+EXTENSION
+FROM AuthenticationFramework
+{joint-iso-itu-t ds(5) module(1)
+SUCCESSORS
+
+authenticationFramework(7)
+
+10}
+
+WITH
+
+aAissuingDistributionPoint, altSignatureAlgorithm, altSignatureValue,
+authorityKeyIdentifier,
+authorizationValidation,
+baseUpdateTime,
+basicConstraints,
+certificateIssuer, certificatePolicies, cRLDistributionPoints, cRLNumber,
+cRLStreamIdentifier,
+deltaCRLIndicator,
+deltaInfo,
+expiredCertsOnCRL,
+extKeyUsage,
+freshestCRL, holdInstructionCode, invalidityDate, issuerAltName,
+issuingDistributionPoint, keyUsage, nameConstraints, orderedList,
+policyConstraints,
+policyMappings,
+privateKeyUsagePeriod,
+reasonCode,
+revokedGroups,
+statusReferrals,
+subjectAltName,
+subjectAltPublicKeyInfo,
+subjectDirectoryAttributes,
+subjectKeyIdentifier, toBeRevoked
+FROM CertificateExtensions
+4
+
+Rec. ITU-T X.509 (2019) Amd. 1 (10/2024)
+
+ISO/IEC 9594-8:2020/Amd.1:2025 (E)
+{joint-iso-itu-t
+SUCCESSORS
+
+ds(5)
+
+module(1)
+
+certificateExtensions(26)
+
+10}
+
+WITH
+
+acceptableCertPolicies,
+acceptablePrivilegePolicies,
+allowedAttributeAssignments,
+attributeDescriptor, attributeMappings, authorityAttributeIdentifier,
+basicAttConstraints, delegatedNameConstraints, groupAC, holderNameConstraints,
+issuedOnBehalfOf, noAssertion, noRevAvail, roleSpecCertIdentifier, singleUse,
+sOAIdentifier, targetingInformation, timeSpecification, userNotice
+FROM AttributeCertificateDefinitions
+{joint-iso-itu-t ds(5) module(1) attributeCertificateDefinitions(32) 10}
+WITH SUCCESSORS ;
+
+7)
+
+Annex D
+
+Replace the import section of Annex D, PkiPmiExternalDataTypes module with:
+PkiPmiExternalDataTypes
+{joint-iso-itu-t
+pkiPmiExternalDataTypes(40) 10}
+DEFINITIONS ::=
+BEGIN
+
+ds(5)
+
+module(1)
+
+-- EXPORTS All
+IMPORTS
+intSecurity, PresentationAddress
+FROM UsefulDefinitions {joint-iso-itu-t ds(5) module(1) usefulDefinitions(0)
+10} WITH SUCCESSORS
+EXTENSION
+FROM AuthenticationFramework
+{joint-iso-itu-t ds(5) module(1)
+SUCCESSORS
+GeneralName
+FROM CertificateExtensions
+{joint-iso-itu-t ds(5)
+SUCCESSORS;
+
+module(1)
+
+/*
+PresentationAddress
+FROM SelectedAttributeTypes
+{joint-iso-itu-t ds(5) module(1)
+SUCCESSORS
+*/
+
+authenticationFramework(7)
+
+10}
+
+WITH
+
+certificateExtensions(26)
+
+10}
+
+WITH
+
+selectedAttributeTypes(5)
+
+10}
+
+WITH
+
+Rec. ITU-T X.509 (2019) Amd. 1 (10/2024)
+
+5
+
+SERIES OF ITU-T RECOMMENDATIONS
+Series A
+
+Organization of the work of ITU-T
+
+Series D
+
+Tariff and accounting principles and international telecommunication/ICT economic and policy issues
+
+Series E
+
+Overall network operation, telephone service, service operation and human factors
+
+Series F
+
+Non-telephone telecommunication services
+
+Series G
+
+Transmission systems and media, digital systems and networks
+
+Series H
+
+Audiovisual and multimedia systems
+
+Series I
+
+Integrated services digital network
+
+Series J
+
+Cable networks and transmission of television, sound programme and other multimedia signals
+
+Series K
+
+Protection against interference
+
+Series L
+
+Environment and ICTs, climate change, e-waste, energy efficiency; construction, installation and
+protection of cables and other elements of outside plant
+
+Series M
+
+Telecommunication management, including TMN and network maintenance
+
+Series N
+
+Maintenance: international sound programme and television transmission circuits
+
+Series O
+
+Specifications of measuring equipment
+
+Series P
+
+Telephone transmission quality, telephone installations, local line networks
+
+Series Q
+
+Switching and signalling, and associated measurements and tests
+
+Series R
+
+Telegraph transmission
+
+Series S
+
+Telegraph services terminal equipment
+
+Series T
+
+Terminals for telematic services
+
+Series U
+
+Telegraph switching
+
+Series V
+
+Data communication over the telephone network
+
+Series X
+
+Data networks, open system communications and security
+
+Series Y
+
+Global information infrastructure, Internet protocol aspects, next-generation networks, Internet of
+Things and smart cities
+
+Series Z
+
+Languages and general software aspects for telecommunication systems
+
+Published in Switzerland
+Geneva, 2025
+
+
