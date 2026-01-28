@@ -70,4 +70,4 @@ Test-Suite test-x509-ac-validation
 source-repository head
   type:     git
   location: https://github.com/kazu-yamamoto/crypton-certificate
-  subdir:   x509-ac-validation
+  subdir:   crypton-x509-ac-validation
