@@ -1,9 +1,9 @@
 Name:                crypton-x509-ac-validation
 version:             0.1.0
-Synopsis:            Attribute Certificate validation for RFC 5755 and TCG profiles
+Synopsis:            X.509 Attribute Certificate validation (RFC 5755)
 Description:
     This library provides validation functions for X.509 Attribute Certificates
-    as defined in RFC 5755 and TCG Platform Certificates.
+    as defined in RFC 5755.
     .
     Features include:
     .
@@ -12,7 +12,6 @@ Description:
     * Issuer certificate chain validation
     * Revocation checking via Attribute Certificate Revocation Lists (ACRLs)
     * RFC 5755 profile compliance validation
-    * TCG Platform Certificate profile validation
     .
     The library integrates with crypton-x509-validation for PKI operations
     and follows the security requirements of RFC 5755 Section 5.
@@ -31,10 +30,10 @@ Library
   Default-Language:  Haskell2010
   Build-Depends:     base >= 4.7 && < 5
                    , bytestring
-                   , asn1-types >= 0.3.1 && < 0.4
-                   , crypton-x509 >= 1.7.7
-                   , crypton-x509-validation >= 1.6.13
-                   , hourglass >= 0.2
+                   , crypton-asn1-types >= 0.4.1 && < 0.5
+                   , crypton-x509 >= 1.8.0
+                   , crypton-x509-validation >= 1.8.0
+                   , time-hourglass
   Exposed-modules:   Data.X509.AC.Validation
                    , Data.X509.AC.Validation.Signature
                    , Data.X509.AC.Validation.Validity
@@ -57,9 +56,9 @@ Test-Suite test-x509-ac-validation
                    , tasty
                    , tasty-quickcheck
                    , tasty-hunit
-                   , hourglass
-                   , asn1-types
-                   , asn1-encoding
+                   , time-hourglass
+                   , crypton-asn1-types
+                   , crypton-asn1-encoding
                    , crypton-x509
                    , crypton-x509-validation
                    , crypton-x509-ac-validation

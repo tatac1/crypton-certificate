@@ -16,8 +16,8 @@
 --
 -- For validation functions (profile validation, critical extension checking, etc.),
 -- import the 'Data.X509.AC.Validation' module from the crypton-x509-ac-validation package.
-module Data.X509AC
-  ( -- * Core Types
+module Data.X509AC (
+    -- * Core Types
     SignedAttributeCertificate,
     AttributeCertificateInfo (..),
 
@@ -49,7 +49,7 @@ module Data.X509AC
     getAttributes,
     getValidity,
     getSerialNumber,
-  )
+)
 where
 
 import qualified Data.ByteString as B
@@ -80,7 +80,8 @@ encodeSignedAttributeCertificate = encodeSignedObject
 --
 -- Returns 'Left' with an error message if parsing fails,
 -- or 'Right' with the parsed certificate if successful.
-decodeSignedAttributeCertificate :: B.ByteString -> Either String SignedAttributeCertificate
+decodeSignedAttributeCertificate
+    :: B.ByteString -> Either String SignedAttributeCertificate
 decodeSignedAttributeCertificate = decodeSignedObject
 
 -- * Accessor Functions
@@ -88,7 +89,8 @@ decodeSignedAttributeCertificate = decodeSignedObject
 -- | Extract the AttributeCertificateInfo from a SignedAttributeCertificate.
 --
 -- This returns the core certificate information without the signature data.
-getAttributesCertificate :: SignedAttributeCertificate -> AttributeCertificateInfo
+getAttributesCertificate
+    :: SignedAttributeCertificate -> AttributeCertificateInfo
 getAttributesCertificate = signedObject . getSigned
 
 -- | Extract the holder information from an attribute certificate.

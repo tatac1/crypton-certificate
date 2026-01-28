@@ -10,9 +10,9 @@
 -- Profile validation for Attribute Certificates.
 --
 -- This module provides validation functions that enforce profile constraints
--- from RFC 5755 and TCG Platform Certificate Profile v1.1. The design principle
--- is "parser is lenient, validation is strict" - the ASN.1 parser accepts
--- structurally valid certificates, while this module validates profile constraints.
+-- from RFC 5755. The design principle is "parser is lenient, validation is
+-- strict" - the ASN.1 parser accepts structurally valid certificates, while
+-- this module validates profile constraints.
 --
 -- == RFC 5755 Profile Constraints
 --
@@ -23,12 +23,6 @@
 -- * Role attribute roleName MUST be a uniformResourceIdentifier
 -- * Unknown critical extensions MUST cause rejection (RFC 5280)
 --
--- == TCG Platform Certificate Profile Constraints
---
--- * Holder.baseCertificateID MUST reference the EK Certificate
--- * V2Form.issuerName MUST contain exactly one directoryName
--- * V2Form MUST NOT include baseCertificateID or objectDigestInfo
---
 -- == Architectural Note
 --
 -- This module is placed in a separate package (crypton-x509-ac-validation) to
@@ -37,19 +31,14 @@
 --
 -- * Core parsing (crypton-x509) to remain independent of validation logic
 -- * Validation rules to be updated independently
--- * TCG-specific validation (crypton-tcg-platform-cert-validation) to depend on
---   this module for RFC 5755 base validation
-module Data.X509.AC.Validation
-  ( -- * Validation Results
+module Data.X509.AC.Validation (
+    -- * Validation Results
     ValidationError (..),
     ValidationWarning (..),
     ValidationResult (..),
 
     -- * RFC 5755 Profile Validation
     validateRFC5755Profile,
-
-    -- * TCG Platform Certificate Validation
-    validateTCGPlatform,
 
     -- * Helper Functions
     isValid,
@@ -65,92 +54,95 @@ module Data.X509.AC.Validation
 
     -- * Signature Algorithm Validation
     validateSignatureAlgorithm,
-  )
+)
 where
 
 import Data.ASN1.OID (OID)
-import Data.X509 (DistinguishedName (..), AltName (..), ExtensionRaw (..), Extensions (..))
+import Data.X509 (
+    AltName (..),
+    DistinguishedName (..),
+    ExtensionRaw (..),
+    Extensions (..),
+ )
 import Data.X509.AlgorithmIdentifier (HashALG (..), SignatureALG (..))
 import Data.X509.AttCert
-import Data.X509.Attribute (Attr_Role (..), Attributes, RoleSyntax (..), getAttribute)
+import Data.X509.Attribute (
+    Attr_Role (..),
+    Attributes,
+    RoleSyntax (..),
+    getAttribute,
+ )
 
 -- | Validation errors that indicate non-compliance with profile requirements.
 -- These represent hard failures that MUST NOT occur per the relevant specification.
 data ValidationError
-  = -- | RFC 5755 4.2.3: v1Form MUST NOT be used
-    V1FormNotAllowed
-  | -- | RFC 5755 4.2.5: serialNumber exceeds 20 octet limit
-    SerialNumberTooLong
-      { snActualLength :: Int
-      -- ^ Actual byte length of the serial number
-      }
-  | -- | RFC 5755: serialNumber MUST be positive
-    SerialNumberNotPositive
-      { snValue :: Integer
-      -- ^ The invalid serial number value
-      }
-  | -- | ITU-T X.509 WITH COMPONENTS: at least one Holder field required
-    HolderMissingAllFields
-  | -- | RFC 5755 profile: V2Form MUST NOT contain baseCertificateID
-    V2FormBaseCertificateIDPresent
-  | -- | RFC 5755 profile: V2Form MUST NOT contain objectDigestInfo
-    V2FormObjectDigestInfoPresent
-  | -- | RFC 5755: V2Form issuerName MUST contain exactly one directoryName
-    IssuerNameNotSingleDirectoryName
-      { inActualCount :: Int
-      -- ^ Actual number of GeneralNames present
-      }
-  | -- | RFC 5755: V2Form issuerName directoryName MUST NOT be empty
-    IssuerDirectoryNameEmpty
-  | -- | TCG: Holder.baseCertificateID MUST be present
-    TCGHolderBaseCertIDRequired
-  | -- | TCG: Holder MUST NOT use entityName or objectDigestInfo
-    TCGHolderInvalidField
-      { hfFieldName :: String
-      -- ^ Name of the invalid field
-      }
-  | -- | RFC 5280: Unknown critical extension MUST cause rejection
-    UnknownCriticalExtension
-      { uceOID :: OID
-      -- ^ OID of the unknown critical extension
-      }
-  | -- | Weak signature algorithm (MD2, MD5) MUST NOT be used
-    WeakSignatureAlgorithm
-      { wsaAlgorithm :: String
-      -- ^ Name of the weak algorithm
-      }
-  deriving (Show, Eq)
+    = -- | RFC 5755 4.2.3: v1Form MUST NOT be used
+      V1FormNotAllowed
+    | -- | RFC 5755 4.2.5: serialNumber exceeds 20 octet limit
+      SerialNumberTooLong
+        { snActualLength :: Int
+        -- ^ Actual byte length of the serial number
+        }
+    | -- | RFC 5755: serialNumber MUST be positive
+      SerialNumberNotPositive
+        { snValue :: Integer
+        -- ^ The invalid serial number value
+        }
+    | -- | ITU-T X.509 WITH COMPONENTS: at least one Holder field required
+      HolderMissingAllFields
+    | -- | RFC 5755 profile: V2Form MUST NOT contain baseCertificateID
+      V2FormBaseCertificateIDPresent
+    | -- | RFC 5755 profile: V2Form MUST NOT contain objectDigestInfo
+      V2FormObjectDigestInfoPresent
+    | -- | RFC 5755: V2Form issuerName MUST contain exactly one directoryName
+      IssuerNameNotSingleDirectoryName
+        { inActualCount :: Int
+        -- ^ Actual number of GeneralNames present
+        }
+    | -- | RFC 5755: V2Form issuerName directoryName MUST NOT be empty
+      IssuerDirectoryNameEmpty
+    | -- | RFC 5280: Unknown critical extension MUST cause rejection
+      UnknownCriticalExtension
+        { uceOID :: OID
+        -- ^ OID of the unknown critical extension
+        }
+    | -- | Weak signature algorithm (MD2, MD5) MUST NOT be used
+      WeakSignatureAlgorithm
+        { wsaAlgorithm :: String
+        -- ^ Name of the weak algorithm
+        }
+    deriving (Show, Eq)
 
 -- | Validation warnings for non-critical profile deviations.
 -- These indicate potential issues but do not necessarily mean the certificate
 -- is invalid.
 data ValidationWarning
-  = -- | RFC 5755: at least one Holder field SHOULD be present (soft requirement)
-    HolderAllFieldsEmpty
-  | -- | Role attribute roleName is not a URI (RFC 5755 4.4.5)
-    RoleNameNotURI
-  | -- | V2Form contains optional fields (baseCertificateID or objectDigestInfo)
-    V2FormOptionalFieldsPresent
-  | -- | Deprecated signature algorithm (SHA1) - should be avoided
-    DeprecatedSignatureAlgorithm
-      { dsaAlgorithm :: String
-      -- ^ Name of the deprecated algorithm
-      }
-  deriving (Show, Eq)
+    = -- | RFC 5755: at least one Holder field SHOULD be present (soft requirement)
+      HolderAllFieldsEmpty
+    | -- | Role attribute roleName is not a URI (RFC 5755 4.4.5)
+      RoleNameNotURI
+    | -- | V2Form contains optional fields (baseCertificateID or objectDigestInfo)
+      V2FormOptionalFieldsPresent
+    | -- | Deprecated signature algorithm (SHA1) - should be avoided
+      DeprecatedSignatureAlgorithm
+        { dsaAlgorithm :: String
+        -- ^ Name of the deprecated algorithm
+        }
+    deriving (Show, Eq)
 
 -- | Result of validation containing both errors and warnings.
 data ValidationResult = ValidationResult
-  { vrErrors :: [ValidationError]
-  , vrWarnings :: [ValidationWarning]
-  }
-  deriving (Show, Eq)
+    { vrErrors :: [ValidationError]
+    , vrWarnings :: [ValidationWarning]
+    }
+    deriving (Show, Eq)
 
 instance Semigroup ValidationResult where
-  (ValidationResult e1 w1) <> (ValidationResult e2 w2) =
-    ValidationResult (e1 <> e2) (w1 <> w2)
+    (ValidationResult e1 w1) <> (ValidationResult e2 w2) =
+        ValidationResult (e1 <> e2) (w1 <> w2)
 
 instance Monoid ValidationResult where
-  mempty = ValidationResult [] []
+    mempty = ValidationResult [] []
 
 -- | Check if validation passed with no errors.
 isValid :: ValidationResult -> Bool
@@ -181,14 +173,14 @@ hasWarnings = not . null . vrWarnings
 -- function focuses on profile-level validation.
 validateRFC5755Profile :: AttributeCertificateInfo -> ValidationResult
 validateRFC5755Profile aci =
-  mconcat
-    [ validateIssuerRFC5755 (aciIssuer aci)
-    , validateHolderRFC5755 (aciHolder aci)
-    , validateSerialNumber (aciSerialNumber aci)
-    , validateExtensions (aciExtensions aci)
-    , validateRoleAttributes (aciAttributes aci)
-    , validateSignatureAlgorithm (aciSignature aci)
-    ]
+    mconcat
+        [ validateIssuerRFC5755 (aciIssuer aci)
+        , validateHolderRFC5755 (aciHolder aci)
+        , validateSerialNumber (aciSerialNumber aci)
+        , validateExtensions (aciExtensions aci)
+        , validateRoleAttributes (aciAttributes aci)
+        , validateSignatureAlgorithm (aciSignature aci)
+        ]
   where
     validateExtensions (Extensions Nothing) = mempty
     validateExtensions (Extensions (Just exts)) = validateCriticalExtensions exts
@@ -196,10 +188,10 @@ validateRFC5755Profile aci =
 -- | Validate the AttCertIssuer per RFC 5755 profile.
 validateIssuerRFC5755 :: AttCertIssuer -> ValidationResult
 validateIssuerRFC5755 = \case
-  AttCertIssuerV1 _ ->
-    ValidationResult [V1FormNotAllowed] []
-  AttCertIssuerV2 v2 ->
-    validateV2FormRFC5755 v2
+    AttCertIssuerV1 _ ->
+        ValidationResult [V1FormNotAllowed] []
+    AttCertIssuerV2 v2 ->
+        validateV2FormRFC5755 v2
 
 -- | Validate V2Form per RFC 5755 profile.
 --
@@ -209,34 +201,35 @@ validateIssuerRFC5755 = \case
 -- * objectDigestInfo MUST be omitted
 validateV2FormRFC5755 :: V2Form -> ValidationResult
 validateV2FormRFC5755 v2 =
-  let errors = concat
-        [ validateIssuerName (v2fromIssuerName v2)
-        , case v2fromBaseCertificateID v2 of
-            Just _ -> [V2FormBaseCertificateIDPresent]
-            Nothing -> []
-        , case v2fromObjectDigestInfo v2 of
-            Just _ -> [V2FormObjectDigestInfoPresent]
-            Nothing -> []
-        ]
-  in ValidationResult errors []
+    let errors =
+            concat
+                [ validateIssuerName (v2fromIssuerName v2)
+                , case v2fromBaseCertificateID v2 of
+                    Just _ -> [V2FormBaseCertificateIDPresent]
+                    Nothing -> []
+                , case v2fromObjectDigestInfo v2 of
+                    Just _ -> [V2FormObjectDigestInfoPresent]
+                    Nothing -> []
+                ]
+     in ValidationResult errors []
 
 -- | Validate issuerName contains exactly one non-empty directoryName.
 validateIssuerName :: GeneralNames -> [ValidationError]
 validateIssuerName gns = case gns of
-  [AltDirectoryName (DistinguishedName dn)]
-    | null dn -> [IssuerDirectoryNameEmpty]
-    | otherwise -> []
-  _ -> [IssuerNameNotSingleDirectoryName (length gns)]
+    [AltDirectoryName (DistinguishedName dn)]
+        | null dn -> [IssuerDirectoryNameEmpty]
+        | otherwise -> []
+    _ -> [IssuerNameNotSingleDirectoryName (length gns)]
 
 -- | Validate Holder per RFC 5755/ITU-T X.509 requirements.
 --
 -- ITU-T X.509 WITH COMPONENTS constraint: at least one field MUST be present.
 validateHolderRFC5755 :: Holder -> ValidationResult
 validateHolderRFC5755 (Holder mBaseCert mEntity mObjDigest) =
-  case (mBaseCert, mEntity, mObjDigest) of
-    (Nothing, Nothing, Nothing) ->
-      ValidationResult [HolderMissingAllFields] []
-    _ -> ValidationResult [] []
+    case (mBaseCert, mEntity, mObjDigest) of
+        (Nothing, Nothing, Nothing) ->
+            ValidationResult [HolderMissingAllFields] []
+        _ -> ValidationResult [] []
 
 -- | Validate serial number per RFC 5755.
 --
@@ -245,9 +238,9 @@ validateHolderRFC5755 (Holder mBaseCert mEntity mObjDigest) =
 -- * serialNumber SHOULD NOT be longer than 20 octets
 validateSerialNumber :: Integer -> ValidationResult
 validateSerialNumber sn
-  | sn <= 0 = ValidationResult [SerialNumberNotPositive sn] []
-  | byteLen > 20 = ValidationResult [SerialNumberTooLong byteLen] []
-  | otherwise = ValidationResult [] []
+    | sn <= 0 = ValidationResult [SerialNumberNotPositive sn] []
+    | byteLen > 20 = ValidationResult [SerialNumberTooLong byteLen] []
+    | otherwise = ValidationResult [] []
   where
     byteLen = integerByteLength sn
 
@@ -255,49 +248,10 @@ validateSerialNumber sn
 integerByteLength :: Integer -> Int
 integerByteLength 0 = 1
 integerByteLength n
-  | n > 0 = (bitLen + 8) `div` 8  -- +8 to account for sign bit
-  | otherwise = (bitLen + 8) `div` 8
+    | n > 0 = (bitLen + 8) `div` 8 -- +8 to account for sign bit
+    | otherwise = (bitLen + 8) `div` 8
   where
     bitLen = ceiling (logBase 2 (fromInteger (abs n) + 1) :: Double)
-
--- | Validate an AttributeCertificateInfo against TCG Platform Certificate Profile.
---
--- TCG Platform Certificate Profile v1.1 requirements:
---
--- * Holder.baseCertificateID MUST be present and reference the EK Certificate
--- * Holder.entityName and Holder.objectDigestInfo MUST NOT be present
--- * V2Form.issuerName MUST contain exactly one directoryName
--- * V2Form.baseCertificateID and V2Form.objectDigestInfo MUST NOT be present
---
--- This function validates both RFC 5755 base requirements and TCG-specific
--- constraints.
-validateTCGPlatform :: AttributeCertificateInfo -> ValidationResult
-validateTCGPlatform aci =
-  mconcat
-    [ validateRFC5755Profile aci
-    , validateHolderTCG (aciHolder aci)
-    ]
-
--- | Validate Holder per TCG Platform Certificate Profile.
---
--- TCG requirements:
--- * baseCertificateID MUST be present (references EK Certificate)
--- * entityName MUST NOT be present
--- * objectDigestInfo MUST NOT be present
-validateHolderTCG :: Holder -> ValidationResult
-validateHolderTCG (Holder mBaseCert mEntity mObjDigest) =
-  let errors = concat
-        [ case mBaseCert of
-            Nothing -> [TCGHolderBaseCertIDRequired]
-            Just _ -> []
-        , case mEntity of
-            Just _ -> [TCGHolderInvalidField "entityName"]
-            Nothing -> []
-        , case mObjDigest of
-            Just _ -> [TCGHolderInvalidField "objectDigestInfo"]
-            Nothing -> []
-        ]
-  in ValidationResult errors []
 
 -- | Validate Role attributes per RFC 5755 section 4.4.5.
 --
@@ -308,14 +262,15 @@ validateHolderTCG (Holder mBaseCert mEntity mObjDigest) =
 -- a warning if any roleName is not a URI.
 validateRoleAttributes :: Attributes -> ValidationResult
 validateRoleAttributes attrs =
-  case getAttribute attrs :: Maybe [Attr_Role] of
-    Nothing -> mempty  -- No Role attributes present
-    Just roles ->
-      let warnings = [ RoleNameNotURI
-                     | Attr_Role (RoleSyntax _ rn) <- roles
-                     , not (isURI rn)
-                     ]
-      in ValidationResult [] warnings
+    case getAttribute attrs :: Maybe [Attr_Role] of
+        Nothing -> mempty -- No Role attributes present
+        Just roles ->
+            let warnings =
+                    [ RoleNameNotURI
+                    | Attr_Role (RoleSyntax _ rn) <- roles
+                    , not (isURI rn)
+                    ]
+             in ValidationResult [] warnings
   where
     isURI (AltNameURI _) = True
     isURI _ = False
@@ -329,45 +284,40 @@ validateRoleAttributes attrs =
 -- * SHA-2 family (SHA224, SHA256, SHA384, SHA512) are accepted
 validateSignatureAlgorithm :: SignatureALG -> ValidationResult
 validateSignatureAlgorithm sigAlg = case sigAlg of
-  SignatureALG hashAlg _ -> validateHashAlg hashAlg
-  SignatureALG_IntrinsicHash _ -> mempty  -- EdDSA etc., hash is part of algorithm
-  SignatureALG_Unknown _ -> mempty  -- Unknown algorithm, cannot validate
+    SignatureALG hashAlg _ -> validateHashAlg hashAlg
+    SignatureALG_IntrinsicHash _ -> mempty -- EdDSA etc., hash is part of algorithm
+    SignatureALG_Unknown _ -> mempty -- Unknown algorithm, cannot validate
   where
     validateHashAlg HashMD2 = ValidationResult [WeakSignatureAlgorithm "MD2"] []
     validateHashAlg HashMD5 = ValidationResult [WeakSignatureAlgorithm "MD5"] []
     validateHashAlg HashSHA1 = ValidationResult [] [DeprecatedSignatureAlgorithm "SHA1"]
-    validateHashAlg _ = mempty  -- SHA-2 family is acceptable
+    validateHashAlg _ = mempty -- SHA-2 family is acceptable
 
 -- | Known Attribute Certificate extension OIDs that this implementation supports.
 --
 -- This list includes:
 -- * RFC 5280 standard extensions applicable to ACs
 -- * RFC 5755 AC-specific extensions
--- * TCG Platform Certificate extensions
 --
 -- Per RFC 5280 section 4.2: If a certificate contains a critical extension
 -- that is not recognized, then that certificate MUST be rejected.
 knownACExtensionOIDs :: [OID]
 knownACExtensionOIDs =
-  [ -- RFC 5280 standard extensions
-    [2, 5, 29, 35]  -- authorityKeyIdentifier
-  , [2, 5, 29, 31]  -- cRLDistributionPoints
-  , [2, 5, 29, 56]  -- deltaCRLIndicator (used in some ACs)
-  , [2, 5, 29, 55]  -- targetingInformation
-  , [2, 5, 29, 19]  -- basicConstraints
-  , [2, 5, 29, 15]  -- keyUsage
-  , [2, 5, 29, 37]  -- extKeyUsage
-  , [2, 5, 29, 14]  -- subjectKeyIdentifier
-  , [2, 5, 29, 17]  -- subjectAltName
-  , [2, 5, 29, 32]  -- certificatePolicies
-  , [2, 5, 29, 54]  -- noRevAvail
+    [ -- RFC 5280 standard extensions
+      [2, 5, 29, 35] -- authorityKeyIdentifier
+    , [2, 5, 29, 31] -- cRLDistributionPoints
+    , [2, 5, 29, 56] -- deltaCRLIndicator (used in some ACs)
+    , [2, 5, 29, 55] -- targetingInformation
+    , [2, 5, 29, 19] -- basicConstraints
+    , [2, 5, 29, 15] -- keyUsage
+    , [2, 5, 29, 37] -- extKeyUsage
+    , [2, 5, 29, 14] -- subjectKeyIdentifier
+    , [2, 5, 29, 17] -- subjectAltName
+    , [2, 5, 29, 32] -- certificatePolicies
+    , [2, 5, 29, 54] -- noRevAvail
     -- PKIX extensions
-  , [1, 3, 6, 1, 5, 5, 7, 1, 1]  -- authorityInfoAccess
-    -- TCG Platform Certificate extensions
-  , [2, 23, 133, 2, 17]  -- tcg-at-tpmVersion
-  , [2, 23, 133, 2, 1]   -- tcg-at-platformConfiguration
-  , [2, 23, 133, 2, 23]  -- tcg-at-platformConfiguration-v2
-  ]
+    , [1, 3, 6, 1, 5, 5, 7, 1, 1] -- authorityInfoAccess
+    ]
 
 -- | Validate that all critical extensions are known.
 --
@@ -379,10 +329,10 @@ knownACExtensionOIDs =
 -- an error for any that are not in the known extension list.
 validateCriticalExtensions :: [ExtensionRaw] -> ValidationResult
 validateCriticalExtensions exts =
-  let unknownCritical =
-        [ UnknownCriticalExtension (extRawOID ext)
-        | ext <- exts
-        , extRawCritical ext
-        , extRawOID ext `notElem` knownACExtensionOIDs
-        ]
-  in ValidationResult unknownCritical []
+    let unknownCritical =
+            [ UnknownCriticalExtension (extRawOID ext)
+            | ext <- exts
+            , extRawCritical ext
+            , extRawOID ext `notElem` knownACExtensionOIDs
+            ]
+     in ValidationResult unknownCritical []

@@ -176,13 +176,6 @@ tests =
           testProperty "MD5 signature is rejected" prop_md5_rejected,
           testProperty "SHA1 signature produces warning" prop_sha1_warning,
           testProperty "SHA256 signature passes" prop_sha256_passes
-        ],
-      testGroup
-        "TCG Platform Certificate Validation"
-        [ testProperty "holder baseCertificateID required" prop_tcg_holder_baseCertID_required,
-          testProperty "holder entityName not allowed" prop_tcg_holder_entityName_fails,
-          testProperty "holder objectDigestInfo not allowed" prop_tcg_holder_objDigest_fails,
-          testProperty "valid TCG holder passes" prop_tcg_valid_holder_passes
         ]
     ]
 
@@ -277,46 +270,6 @@ prop_v2Form_objDigest_fails =
         let aci = makeTestACI holder issuer 1
         let result = validateRFC5755Profile aci
         V2FormObjectDigestInfoPresent `elem` vrErrors result
-
--- TCG Platform Certificate Validation Properties
-
-prop_tcg_holder_baseCertID_required :: Property
-prop_tcg_holder_baseCertID_required = forAll genValidV2FormIssuer $ \issuer -> do
-  let holder = Holder Nothing Nothing Nothing
-  let aci = makeTestACI holder issuer 1
-  let result = validateTCGPlatform aci
-  TCGHolderBaseCertIDRequired `elem` vrErrors result
-
-prop_tcg_holder_entityName_fails :: Property
-prop_tcg_holder_entityName_fails =
-  forAll arbitrary $ \is ->
-    forAll (listOf1NonEmpty arbitrary) $ \gns ->
-      forAll genValidV2FormIssuer $ \issuer -> do
-        let holder = Holder (Just is) (Just gns) Nothing
-        let aci = makeTestACI holder issuer 1
-        let result = validateTCGPlatform aci
-        TCGHolderInvalidField "entityName" `elem` vrErrors result
-
-prop_tcg_holder_objDigest_fails :: Property
-prop_tcg_holder_objDigest_fails =
-  forAll arbitrary $ \is ->
-    forAll arbitrary $ \odi ->
-      forAll genValidV2FormIssuer $ \issuer -> do
-        let holder = Holder (Just is) Nothing (Just odi)
-        let aci = makeTestACI holder issuer 1
-        let result = validateTCGPlatform aci
-        TCGHolderInvalidField "objectDigestInfo" `elem` vrErrors result
-
-prop_tcg_valid_holder_passes :: Property
-prop_tcg_valid_holder_passes =
-  forAll arbitrary $ \is ->
-    forAll genValidV2FormIssuer $ \issuer -> do
-      let holder = Holder (Just is) Nothing Nothing
-      let aci = makeTestACI holder issuer 1
-      let result = validateTCGPlatform aci
-      not (TCGHolderBaseCertIDRequired `elem` vrErrors result)
-        && not (TCGHolderInvalidField "entityName" `elem` vrErrors result)
-        && not (TCGHolderInvalidField "objectDigestInfo" `elem` vrErrors result)
 
 -- Critical Extension Validation Properties
 

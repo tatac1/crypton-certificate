@@ -27,8 +27,8 @@
 -- * AC-SIG-1.5: ECDSA signature verification
 -- * AC-SIG-1.6: MD5 signature (weak)
 -- * AC-SIG-1.7: SHA1 signature (deprecated)
-module Data.X509.AC.Validation.Signature
-  ( -- * Signature Verification
+module Data.X509.AC.Validation.Signature (
+    -- * Signature Verification
     verifyACSignature,
     SignatureResult (..),
     SignatureError (..),
@@ -37,49 +37,49 @@ module Data.X509.AC.Validation.Signature
     -- * Re-exports from x509-validation
     SignatureVerification (..),
     SignatureFailure (..),
-  )
+)
 where
 
 import Data.X509 (PubKey, SignatureALG (..), getSigned, signedAlg, signedObject)
 import Data.X509.AlgorithmIdentifier (HashALG (..))
 import Data.X509.AttCert
-import Data.X509AC (SignedAttributeCertificate)
-import Data.X509.Validation
-  ( SignatureFailure (..),
+import Data.X509.Validation (
+    SignatureFailure (..),
     SignatureVerification (..),
     verifySignedSignature,
-  )
+ )
+import Data.X509AC (SignedAttributeCertificate)
 
 -- | Errors specific to AC signature verification.
 data SignatureError
-  = -- | The signature verification failed (invalid signature, unsupported algorithm, etc.)
-    SigVerificationFailed SignatureFailure
-  | -- | The signature algorithm in AttributeCertificateInfo doesn't match the outer signature
-    SigAlgorithmMismatch
-      { saeInnerAlg :: SignatureALG
-      -- ^ Algorithm in AttributeCertificateInfo.signature
-      , saeOuterAlg :: SignatureALG
-      -- ^ Algorithm in outer signed structure
-      }
-  | -- | Weak signature algorithm (MD2, MD5) that MUST NOT be accepted
-    SigWeakAlgorithm String
-  deriving (Show, Eq)
+    = -- | The signature verification failed (invalid signature, unsupported algorithm, etc.)
+      SigVerificationFailed SignatureFailure
+    | -- | The signature algorithm in AttributeCertificateInfo doesn't match the outer signature
+      SigAlgorithmMismatch
+        { saeInnerAlg :: SignatureALG
+        -- ^ Algorithm in AttributeCertificateInfo.signature
+        , saeOuterAlg :: SignatureALG
+        -- ^ Algorithm in outer signed structure
+        }
+    | -- | Weak signature algorithm (MD2, MD5) that MUST NOT be accepted
+      SigWeakAlgorithm String
+    deriving (Show, Eq)
 
 -- | Warning for deprecated signature algorithms.
 data SignatureWarning
-  = -- | Deprecated signature algorithm (SHA1) - should be avoided
-    SigDeprecatedAlgorithm String
-  deriving (Show, Eq)
+    = -- | Deprecated signature algorithm (SHA1) - should be avoided
+      SigDeprecatedAlgorithm String
+    deriving (Show, Eq)
 
 -- | Result of signature verification including both errors and warnings.
 data SignatureResult
-  = -- | Signature verification passed
-    SigSuccess
-  | -- | Signature verification passed but with warnings
-    SigWarning SignatureWarning
-  | -- | Signature verification failed
-    SigError SignatureError
-  deriving (Show, Eq)
+    = -- | Signature verification passed
+      SigSuccess
+    | -- | Signature verification passed but with warnings
+      SigWarning SignatureWarning
+    | -- | Signature verification failed
+      SigError SignatureError
+    deriving (Show, Eq)
 
 -- | Verify an Attribute Certificate signature.
 --
@@ -94,26 +94,26 @@ data SignatureResult
 -- The @pubKey@ parameter should be the public key from the AA certificate
 -- that issued this AC.
 verifyACSignature
-  :: PubKey
-  -- ^ AA public key (from AA certificate)
-  -> SignedAttributeCertificate
-  -- ^ Signed Attribute Certificate to verify
-  -> SignatureResult
+    :: PubKey
+    -- ^ AA public key (from AA certificate)
+    -> SignedAttributeCertificate
+    -- ^ Signed Attribute Certificate to verify
+    -> SignatureResult
 verifyACSignature pubKey signedAC
-  -- Check algorithm match first
-  | innerSigAlg /= outerSigAlg =
-      SigError $ SigAlgorithmMismatch innerSigAlg outerSigAlg
-  -- Check for weak algorithms
-  | isWeakAlgorithm innerSigAlg =
-      SigError $ SigWeakAlgorithm (showAlgorithm innerSigAlg)
-  -- Perform actual signature verification
-  | otherwise = case verifySignedSignature signedAC pubKey of
-      SignaturePass
-        | isDeprecatedAlgorithm innerSigAlg ->
-            SigWarning $ SigDeprecatedAlgorithm (showAlgorithm innerSigAlg)
-        | otherwise -> SigSuccess
-      SignatureFailed failure ->
-        SigError $ SigVerificationFailed failure
+    -- Check algorithm match first
+    | innerSigAlg /= outerSigAlg =
+        SigError $ SigAlgorithmMismatch innerSigAlg outerSigAlg
+    -- Check for weak algorithms
+    | isWeakAlgorithm innerSigAlg =
+        SigError $ SigWeakAlgorithm (showAlgorithm innerSigAlg)
+    -- Perform actual signature verification
+    | otherwise = case verifySignedSignature signedAC pubKey of
+        SignaturePass
+            | isDeprecatedAlgorithm innerSigAlg ->
+                SigWarning $ SigDeprecatedAlgorithm (showAlgorithm innerSigAlg)
+            | otherwise -> SigSuccess
+        SignatureFailed failure ->
+            SigError $ SigVerificationFailed failure
   where
     signed = getSigned signedAC
     innerSigAlg = aciSignature (signedObject signed)
@@ -124,9 +124,9 @@ verifyACSignature pubKey signedAC
 -- MD2 and MD5 are considered weak due to known collision attacks.
 isWeakAlgorithm :: SignatureALG -> Bool
 isWeakAlgorithm = \case
-  SignatureALG HashMD2 _ -> True
-  SignatureALG HashMD5 _ -> True
-  _ -> False
+    SignatureALG HashMD2 _ -> True
+    SignatureALG HashMD5 _ -> True
+    _ -> False
 
 -- | Check if a signature algorithm is deprecated (should be avoided).
 --
@@ -134,18 +134,18 @@ isWeakAlgorithm = \case
 -- though it may still be acceptable in some contexts.
 isDeprecatedAlgorithm :: SignatureALG -> Bool
 isDeprecatedAlgorithm = \case
-  SignatureALG HashSHA1 _ -> True
-  _ -> False
+    SignatureALG HashSHA1 _ -> True
+    _ -> False
 
 -- | Display a signature algorithm for error/warning messages.
 showAlgorithm :: SignatureALG -> String
 showAlgorithm = \case
-  SignatureALG HashMD2 _ -> "MD2"
-  SignatureALG HashMD5 _ -> "MD5"
-  SignatureALG HashSHA1 _ -> "SHA1"
-  SignatureALG HashSHA224 _ -> "SHA224"
-  SignatureALG HashSHA256 _ -> "SHA256"
-  SignatureALG HashSHA384 _ -> "SHA384"
-  SignatureALG HashSHA512 _ -> "SHA512"
-  SignatureALG_IntrinsicHash _ -> "Intrinsic"
-  SignatureALG_Unknown oid -> "Unknown(" ++ show oid ++ ")"
+    SignatureALG HashMD2 _ -> "MD2"
+    SignatureALG HashMD5 _ -> "MD5"
+    SignatureALG HashSHA1 _ -> "SHA1"
+    SignatureALG HashSHA224 _ -> "SHA224"
+    SignatureALG HashSHA256 _ -> "SHA256"
+    SignatureALG HashSHA384 _ -> "SHA384"
+    SignatureALG HashSHA512 _ -> "SHA512"
+    SignatureALG_IntrinsicHash _ -> "Intrinsic"
+    SignatureALG_Unknown oid -> "Unknown(" ++ show oid ++ ")"

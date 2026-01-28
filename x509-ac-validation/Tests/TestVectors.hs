@@ -20,7 +20,6 @@ module TestVectors
     keyUsageTestCases,
     revocationTestCases,
     rfc5755TestCases,
-    tcgTestCases,
 
     -- * DateTime utilities
     defaultValidityStart,
@@ -58,7 +57,6 @@ data TestCategory
   | CatKeyUsage        -- ^ 4.7 Key Usage (AC-KU-*)
   | CatRevocation      -- ^ 4.4 Revocation (AC-REV-*)
   | CatRFC5755         -- ^ RFC 5755 Profile (AC-RFC-*)
-  | CatTCG             -- ^ TCG Platform Certificate (AC-TCG-*)
   deriving (Show, Eq, Enum, Bounded)
 
 -- | A test case definition.
@@ -444,38 +442,3 @@ rfc5755TestCases =
       }
   ]
 
---------------------------------------------------------------------------------
--- TCG Platform Certificate Test Cases
---------------------------------------------------------------------------------
-
-tcgTestCases :: [TestCase]
-tcgTestCases =
-  [ TestCase
-      { tcId = "AC-TCG-9.1"
-      , tcName = "Valid Platform Certificate"
-      , tcDescription = "Valid TCG Platform Certificate with all required fields"
-      , tcCategory = CatTCG
-      , tcExpected = ExpectSuccess
-      }
-  , TestCase
-      { tcId = "AC-TCG-9.2"
-      , tcName = "Holder baseCertificateID Missing"
-      , tcDescription = "TCG Platform Cert missing required baseCertificateID"
-      , tcCategory = CatTCG
-      , tcExpected = ExpectError "TCGHolderBaseCertIDRequired"
-      }
-  , TestCase
-      { tcId = "AC-TCG-9.3"
-      , tcName = "entityName Present (prohibited)"
-      , tcDescription = "TCG Platform Cert has entityName in holder (prohibited)"
-      , tcCategory = CatTCG
-      , tcExpected = ExpectError "TCGHolderInvalidField"
-      }
-  , TestCase
-      { tcId = "AC-TCG-9.4"
-      , tcName = "objectDigestInfo Present (prohibited)"
-      , tcDescription = "TCG Platform Cert has objectDigestInfo in holder (prohibited)"
-      , tcCategory = CatTCG
-      , tcExpected = ExpectError "TCGHolderInvalidField"
-      }
-  ]

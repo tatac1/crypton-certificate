@@ -12,15 +12,15 @@
 -- This module provides low-level access to attribute data before it is
 -- parsed into specific attribute types. This is useful for handling
 -- unknown or custom attribute types that may not have specific parsers.
-module Data.X509.AttributeRaw
-  ( -- * Raw Attribute Types
+module Data.X509.AttributeRaw (
+    -- * Raw Attribute Types
     AttributeRaw (..),
     Attributes (..),
 
     -- * Raw ASN1 Access
     tryAttRawASN1,
     attRawASN1,
-  )
+)
 where
 
 import Data.ASN1.Parse
@@ -33,26 +33,29 @@ import Data.X509.Internal
 -- attribute type. It contains the OID that identifies the attribute type
 -- and the raw ASN.1 values.
 data AttributeRaw = AttributeRaw
-  { attrRawOID :: OID, -- ^ The Object Identifier for this attribute type
-    attrRawValues :: [ASN1] -- ^ The raw ASN.1 values (content of the SET OF)
-  }
-  deriving (Show, Eq)
+    { attrRawOID :: OID
+    -- ^ The Object Identifier for this attribute type
+    , attrRawValues :: [ASN1]
+    -- ^ The raw ASN.1 values (content of the SET OF)
+    }
+    deriving (Show, Eq)
 
 instance ASN1Object AttributeRaw where
-  fromASN1 :: [ASN1] -> Either String (AttributeRaw, [ASN1])
-  fromASN1 = runParseASN1State parseAttributeRaw
-    where
-      parseAttributeRaw =
-        onNextContainer Sequence $ do
-          oid <- getNext >>= \n -> case n of
-            OID o -> return o
-            _ -> throwParseError "Expected OID for attribute type"
-          values <- onNextContainer Set (getMany getNext)
-          return $ AttributeRaw oid values
+    fromASN1 :: [ASN1] -> Either String (AttributeRaw, [ASN1])
+    fromASN1 = runParseASN1State parseAttributeRaw
+      where
+        parseAttributeRaw =
+            onNextContainer Sequence $ do
+                oid <-
+                    getNext >>= \n -> case n of
+                        OID o -> return o
+                        _ -> throwParseError "Expected OID for attribute type"
+                values <- onNextContainer Set (getMany getNext)
+                return $ AttributeRaw oid values
 
-  toASN1 :: AttributeRaw -> ASN1S
-  toASN1 (AttributeRaw oid values) xs =
-    asn1Container Sequence (OID oid : asn1Container Set values) ++ xs
+    toASN1 :: AttributeRaw -> ASN1S
+    toASN1 (AttributeRaw oid values) xs =
+        asn1Container Sequence (OID oid : asn1Container Set values) ++ xs
 
 -- | Safely extract the raw ASN.1 values from an AttributeRaw.
 --
@@ -73,15 +76,15 @@ attRawASN1 = attrRawValues
 -- This type can represent either an empty attribute collection (Nothing)
 -- or a non-empty collection of attributes (Just [AttributeRaw]).
 newtype Attributes = Attributes (Maybe [AttributeRaw])
-  deriving (Show, Eq)
+    deriving (Show, Eq)
 
 instance ASN1Object Attributes where
-  toASN1 :: Attributes -> ASN1S
-  toASN1 (Attributes Nothing) = id
-  toASN1 (Attributes (Just attrs)) =
-    \xs -> asn1Container Sequence (concatMap (`toASN1` []) attrs) ++ xs
+    toASN1 :: Attributes -> ASN1S
+    toASN1 (Attributes Nothing) = id
+    toASN1 (Attributes (Just attrs)) =
+        \xs -> asn1Container Sequence (concatMap (`toASN1` []) attrs) ++ xs
 
-  fromASN1 :: [ASN1] -> Either String (Attributes, [ASN1])
-  fromASN1 = runParseASN1State (Attributes <$> parseAttributes)
-    where
-      parseAttributes = onNextContainerMaybe Sequence (getMany getObject)
+    fromASN1 :: [ASN1] -> Either String (Attributes, [ASN1])
+    fromASN1 = runParseASN1State (Attributes <$> parseAttributes)
+      where
+        parseAttributes = onNextContainerMaybe Sequence (getMany getObject)
