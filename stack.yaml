@@ -7,10 +7,6 @@ packages:
 - crypton-x509-validation
 - crypton-x509-util
 - x509-ac-validation
-- tcg-platform-cert
-- tcg-platform-cert-validation
-- tcg-platform-cert-util
-- platform-hardware-info
 
 extra-deps:
 - crypton-pem-0.3.0
@@ -21,6 +17,3 @@ extra-deps:
 
 nix:
   pure: false
-
-ghc-options:
-  "$locals": "-optc-Wno-error -optc-Wno-nullability-completeness -optc-Wno-expansion-to-defined"
