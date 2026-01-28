@@ -39,14 +39,14 @@ library
   build-depends:
       base >= 4.9 && < 5
     , bytestring
-    , asn1-types >= 0.2.0
-    , asn1-encoding
-    , asn1-parse
+    , crypton-asn1-types >= 0.4.1
+    , crypton-asn1-encoding >= 0.10.0
+    , crypton-asn1-parse >= 0.10.0
     , crypton
     , crypton-x509 >= 1.7.6
-    , hourglass
+    , time-hourglass
     , memory
-    , pem
+    , crypton-pem
     , containers
     , mtl
 
@@ -88,13 +88,13 @@ test-suite test-tcg-platform-cert
       tcg-platform-cert
     , base
     , bytestring
-    , asn1-types
-    , asn1-encoding
+    , crypton-asn1-types
+    , crypton-asn1-encoding
     , crypton-x509
     , crypton
     , tasty
     , tasty-quickcheck
     , tasty-hunit
     , QuickCheck
-    , hourglass
+    , time-hourglass
     , sbv >= 8.0

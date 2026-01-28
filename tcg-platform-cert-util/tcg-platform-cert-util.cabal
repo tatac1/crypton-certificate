@@ -45,7 +45,7 @@ Library
                    , containers
                    , directory
                    , filepath
-                   , hourglass
+                   , time-hourglass
                    , memory
                    , pem
                    , text
@@ -54,8 +54,8 @@ Library
                    , crypton-x509 >= 1.7.1
                    , crypton-x509-store
                    , crypton-x509-validation
-                   , asn1-types >= 0.3
-                   , asn1-encoding
+                   , crypton-asn1-types >= 0.3
+                   , crypton-asn1-encoding
                    , tcg-platform-cert
                    , yaml
                    , platform-hardware-info
@@ -81,7 +81,7 @@ Executable           tcg-platform-cert-util
                    , containers
                    , directory
                    , filepath
-                   , hourglass
+                   , time-hourglass
                    , memory
                    , pem
                    , text
@@ -90,8 +90,8 @@ Executable           tcg-platform-cert-util
                    , crypton-x509 >= 1.7.1
                    , crypton-x509-store
                    , crypton-x509-validation
-                   , asn1-types >= 0.3
-                   , asn1-encoding
+                   , crypton-asn1-types >= 0.3
+                   , crypton-asn1-encoding
                    , tcg-platform-cert
                    , yaml
                    , platform-hardware-info
@@ -107,15 +107,15 @@ Test-Suite           test-tcg-platform-cert-util
                    , bytestring
                    , directory
                    , filepath
-                   , hourglass
+                   , time-hourglass
                    , pem
                    , text
                    , time
                    , crypton
                    , crypton-x509 >= 1.7.1
                    , crypton-x509-store >= 1.6.7
-                   , asn1-types >= 0.3
-                   , asn1-encoding
+                   , crypton-asn1-types >= 0.3
+                   , crypton-asn1-encoding
                    , tcg-platform-cert
                    , tcg-platform-cert-util
                    , yaml

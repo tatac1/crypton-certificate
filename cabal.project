@@ -7,6 +7,8 @@ packages:
   tcg-platform-cert
   tcg-platform-cert-validation
   tcg-platform-cert-util
+  platform-hardware-info
+  x509-ac-validation
 
 -- Allow newer versions for compatibility
 allow-newer:

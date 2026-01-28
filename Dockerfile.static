@@ -1,0 +1,60 @@
+# Dockerfile for building static Linux binaries
+# Build with: podman build -f Dockerfile.static -t tcg-platform-cert-util-static .
+# Extract binary: podman run --rm -v $(pwd)/dist:/dist tcg-platform-cert-util-static
+
+FROM alpine:3.20 AS builder
+
+# Install build dependencies and GHC from Alpine packages
+RUN apk add --no-cache \
+    curl \
+    gcc \
+    g++ \
+    ghc \
+    cabal \
+    gmp-dev \
+    libffi-dev \
+    make \
+    musl-dev \
+    ncurses-dev \
+    perl \
+    tar \
+    xz \
+    zlib-dev \
+    zlib-static \
+    gmp \
+    libffi \
+    ncurses-static
+
+# Set up working directory
+WORKDIR /build
+
+# Copy project files
+COPY . .
+
+# Update cabal package list
+RUN cabal update
+
+# Build with static linking
+RUN cabal build \
+    --ghc-options="-static -optl-static -optl-pthread -fPIC" \
+    --enable-executable-static \
+    tcg-platform-cert-util
+
+# Find and copy the binary
+RUN mkdir -p /output && \
+    find dist-newstyle -name "tcg-platform-cert-util" -type f -executable -exec cp {} /output/ \;
+
+# Verify static linking
+RUN file /output/tcg-platform-cert-util && \
+    ldd /output/tcg-platform-cert-util 2>&1 || echo "Static binary (no dynamic dependencies)"
+
+# Final stage - minimal image with just the binary
+FROM scratch AS runtime
+COPY --from=builder /output/tcg-platform-cert-util /tcg-platform-cert-util
+ENTRYPOINT ["/tcg-platform-cert-util"]
+
+# Alternative: copy to mounted volume
+FROM builder AS extract
+CMD cp /output/tcg-platform-cert-util /dist/ && \
+    echo "Binary copied to /dist/tcg-platform-cert-util" && \
+    file /dist/tcg-platform-cert-util
