@@ -1,0 +1,81 @@
+Name:                crypton-x509-ac-validation
+version:             0.1.0
+Synopsis:            X.509 Attribute Certificate validation (RFC 5755)
+Description:
+    This library provides validation functions for X.509 Attribute Certificates
+    as defined in RFC 5755.
+    .
+    Features include:
+    .
+    * Signature verification for Attribute Certificates
+    * Validity period checking (notBefore/notAfter)
+    * Issuer certificate chain validation
+    * Revocation checking via Attribute Certificate Revocation Lists (ACRLs)
+    * RFC 5755 profile compliance validation
+    .
+    The library integrates with crypton-x509-validation for PKI operations
+    and follows the security requirements of RFC 5755 Section 5.
+License:             BSD3
+License-file:        LICENSE
+Copyright:           Vincent Hanquez <vincent@snarc.org>
+Author:              Toru Tomita <toru.tomita@gmail.com>
+Maintainer:          Toru Tomita <toru.tomita@gmail.com>
+Build-Type:          Simple
+Category:            Data
+stability:           experimental
+Homepage:            https://github.com/kazu-yamamoto/crypton-certificate
+Cabal-Version:       >= 1.10
+
+Flag sbv-tests
+  Description:       Enable SBV formal verification tests (requires Z3 solver)
+  Default:           False
+  Manual:            True
+
+Library
+  Default-Language:  Haskell2010
+  Build-Depends:     base >= 4.7 && < 5
+                   , bytestring
+                   , crypton-asn1-types >= 0.4.1 && < 0.5
+                   , crypton-x509 >= 1.8.0
+                   , crypton-x509-validation >= 1.8.0
+                   , time-hourglass
+  Exposed-modules:   Data.X509.AC.Validation
+                   , Data.X509.AC.Validation.Signature
+                   , Data.X509.AC.Validation.Validity
+                   , Data.X509.AC.Validation.Path
+                   , Data.X509.AC.Validation.Revocation
+  ghc-options:       -Wall
+
+Test-Suite test-x509-ac-validation
+  Default-Language:  Haskell2010
+  type:              exitcode-stdio-1.0
+  hs-source-dirs:    Tests
+  Main-is:           Tests.hs
+  Other-modules:     TestACValidation
+                   , Certificate
+                   , TestVectors
+                   , StaticTests
+  Build-Depends:     base >= 3 && < 5
+                   , bytestring
+                   , tasty
+                   , tasty-quickcheck
+                   , tasty-hunit
+                   , time-hourglass
+                   , crypton-asn1-types
+                   , crypton-asn1-encoding
+                   , crypton-x509
+                   , crypton-x509-validation
+                   , crypton-x509-ac-validation
+                   , crypton
+                   , memory
+  ghc-options:       -Wall -fno-warn-orphans -fno-warn-missing-signatures
+
+  if flag(sbv-tests)
+    Other-modules:   SBV
+    Build-Depends:   sbv >= 10.0
+    cpp-options:     -DSBV_TESTS
+
+source-repository head
+  type:     git
+  location: https://github.com/kazu-yamamoto/crypton-certificate
+  subdir:   crypton-x509-ac-validation

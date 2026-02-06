@@ -7,6 +7,7 @@ packages:
 - x509-system
 - x509-validation
 - x509-util
+- crypton-x509-ac-validation
 
 extra-deps:
 - crypton-pem-0.3.0
