@@ -32,7 +32,12 @@ module Data.X509.Ext (
     extensionGetE,
     extensionDecode,
     extensionEncode,
-) where
+    parseGeneralName,
+    parseGeneralNames,
+    encodeGeneralName,
+    encodeGeneralNames,
+)
+where
 
 import Control.Applicative
 import Control.Monad
@@ -47,6 +52,7 @@ import Data.List (find)
 import Data.Proxy
 import Data.X509.DistinguishedName
 import Data.X509.ExtensionRaw
+import Data.X509.Internal
 
 -- | key usage flag that is found in the key usage extension field.
 data ExtKeyUsageFlag
@@ -221,7 +227,6 @@ instance Extension ExtSubjectKeyId where
 -- Not all name types are available, missing:
 -- otherName
 -- x400Address
--- directoryName
 -- ediPartyName
 -- registeredID
 data AltName
@@ -231,6 +236,7 @@ data AltName
     | AltNameIP B.ByteString
     | AltNameXMPP String
     | AltNameDNSSRV String
+    | AltDirectoryName DistinguishedName
     deriving (Show, Eq, Ord)
 
 -- | Provide a way to supply alternate name that can be
@@ -289,14 +295,12 @@ instance Extension ExtCrlDistributionPoints where
 
 -- extEncode (ExtCrlDistributionPoints )
 
-parseGeneralNames :: ParseASN1 [AltName]
-parseGeneralNames = onNextContainer Sequence $ getMany getAddr
+-- | Parse a single GeneralName from an ASN.1 stream.
+parseGeneralName :: ParseASN1 AltName
+parseGeneralName = do
+    m <- onNextContainerMaybe (Container Context 0) getComposedAddr
+    maybe getSimpleAddr return m
   where
-    getAddr = do
-        m <- onNextContainerMaybe (Container Context 0) getComposedAddr
-        case m of
-            Nothing -> getSimpleAddr
-            Just r -> return r
     getComposedAddr = do
         n <- getNext
         case n of
@@ -329,37 +333,46 @@ parseGeneralNames = onNextContainer Sequence $ getMany getAddr
         case n of
             (Other Context 1 b) -> return $ AltNameRFC822 $ BC.unpack b
             (Other Context 2 b) -> return $ AltNameDNS $ BC.unpack b
+            (Start (Container Context 4)) -> AltDirectoryName <$> getObject
             (Other Context 6 b) -> return $ AltNameURI $ BC.unpack b
             (Other Context 7 b) -> return $ AltNameIP b
             _ ->
                 throwParseError ("GeneralNames: not coping with unknown stream " ++ show n)
 
+-- | Parse GeneralNames (SEQUENCE OF GeneralName) from an ASN.1 stream.
+parseGeneralNames :: ParseASN1 [AltName]
+parseGeneralNames = onNextContainer Sequence $ getMany parseGeneralName
+
+-- | Encode a single GeneralName to ASN.1.
+encodeGeneralName :: AltName -> [ASN1]
+encodeGeneralName (AltNameRFC822 n) = [Other Context 1 $ BC.pack n]
+encodeGeneralName (AltNameDNS n) = [Other Context 2 $ BC.pack n]
+encodeGeneralName (AltDirectoryName dn) = asn1Container (Container Context 4) (toASN1 dn [])
+encodeGeneralName (AltNameURI n) = [Other Context 6 $ BC.pack n]
+encodeGeneralName (AltNameIP n) = [Other Context 7 $ n]
+encodeGeneralName (AltNameXMPP n) =
+    [ Start (Container Context 0)
+    , OID [1, 3, 6, 1, 5, 5, 7, 8, 5]
+    , Start (Container Context 0)
+    , ASN1String $ asn1CharacterString UTF8 n
+    , End (Container Context 0)
+    , End (Container Context 0)
+    ]
+encodeGeneralName (AltNameDNSSRV n) =
+    [ Start (Container Context 0)
+    , OID [1, 3, 6, 1, 5, 5, 7, 8, 7]
+    , Start (Container Context 0)
+    , ASN1String $ asn1CharacterString UTF8 n
+    , End (Container Context 0)
+    , End (Container Context 0)
+    ]
+
+-- | Encode GeneralNames (SEQUENCE OF GeneralName) to ASN.1.
 encodeGeneralNames :: [AltName] -> [ASN1]
 encodeGeneralNames names =
     [Start Sequence]
-        ++ concatMap encodeAltName names
+        ++ concatMap encodeGeneralName names
         ++ [End Sequence]
-  where
-    encodeAltName (AltNameRFC822 n) = [Other Context 1 $ BC.pack n]
-    encodeAltName (AltNameDNS n) = [Other Context 2 $ BC.pack n]
-    encodeAltName (AltNameURI n) = [Other Context 6 $ BC.pack n]
-    encodeAltName (AltNameIP n) = [Other Context 7 $ n]
-    encodeAltName (AltNameXMPP n) =
-        [ Start (Container Context 0)
-        , OID [1, 3, 6, 1, 5, 5, 7, 8, 5]
-        , Start (Container Context 0)
-        , ASN1String $ asn1CharacterString UTF8 n
-        , End (Container Context 0)
-        , End (Container Context 0)
-        ]
-    encodeAltName (AltNameDNSSRV n) =
-        [ Start (Container Context 0)
-        , OID [1, 3, 6, 1, 5, 5, 7, 8, 5]
-        , Start (Container Context 0)
-        , ASN1String $ asn1CharacterString UTF8 n
-        , End (Container Context 0)
-        , End (Container Context 0)
-        ]
 
 bitsToFlags :: Enum a => BitArray -> [a]
 bitsToFlags bits = concat $ flip map [0 .. (bitArrayLength bits - 1)] $ \i -> do
