@@ -267,30 +267,46 @@ extensionProofs = testGroup "Extension Proofs (Section 4.3)"
         ThmResult (Unsatisfiable {}) -> return ()
         _ -> assertFailure "crlDistributionPoints single proof failed"
 
+    -- RFC 5755 §4.3.2: Target CHOICE tag enumeration
+    -- Proves: The set {0, 1, 2} is equivalent to the range [0, 2] for Word32.
+    -- This verifies that Target's three IMPLICIT context tags form a contiguous
+    -- range with no gaps, ensuring that range-based tag validation is sound.
   , testCase "Target CHOICE tag enumeration (0-2)" $ do
       result <- proveWith z3{verbose=False} targetChoiceEnumerationProperty
       case result of
         ThmResult (Unsatisfiable {}) -> return ()
         _ -> assertFailure "Target CHOICE tag enumeration proof failed"
 
+    -- RFC 5755 §4.3.2: TargetCert required field constraint
+    -- Proves: A valid TargetCert (hasCertificate=True) implies targetCertificate
+    -- is present. Formalizes that IssuerSerial is REQUIRED in TargetCert.
   , testCase "TargetCert required field constraint" $ do
       result <- proveWith z3{verbose=False} targetCertRequiredFieldProperty
       case result of
         ThmResult (Unsatisfiable {}) -> return ()
         _ -> assertFailure "TargetCert required field proof failed"
 
+    -- RFC 5755 §4.3.2: ExtTargetInformation non-empty constraint
+    -- Proves: A conforming ExtTargetInformation (present AND non-empty) implies
+    -- at least one Target exists. Formalizes SEQUENCE OF semantic requirement.
   , testCase "ExtTargetInformation non-empty constraint" $ do
       result <- proveWith z3{verbose=False} targetInfoNonEmptyProperty
       case result of
         ThmResult (Unsatisfiable {}) -> return ()
         _ -> assertFailure "ExtTargetInformation non-empty proof failed"
 
+    -- RFC 5755 §4.3.1: ExtAuditIdentity OCTET STRING encoding
+    -- Proves: A valid auditIdentity encoding (tag=0x04, 1<=len<=20) implies
+    -- OCTET STRING tag with valid length. Formalizes the ASN.1 type constraint.
   , testCase "ExtAuditIdentity OCTET STRING encoding constraint" $ do
       result <- proveWith z3{verbose=False} auditIdentityOctetStringProperty
       case result of
         ThmResult (Unsatisfiable {}) -> return ()
         _ -> assertFailure "ExtAuditIdentity OCTET STRING proof failed"
 
+    -- RFC 5755 §4.3.6: ExtNoRevAvail NULL encoding
+    -- Proves: A valid noRevAvail encoding (tag=0x05, contentLen=0) implies
+    -- NULL tag with zero length. Formalizes that DER encoding is '0500'H.
   , testCase "ExtNoRevAvail NULL encoding constraint" $ do
       result <- proveWith z3{verbose=False} noRevAvailNullEncodingProperty
       case result of
@@ -1330,9 +1346,45 @@ sequenceNumberRDNUsageProperty = do
   -- Theorem: different sequence numbers imply different entries (uniqueness)
   return $ differentNumbers .<=> differentEntries
 
+-- =====================================================================
+-- AC Extension Structure Proofs (RFC 5755 Section 4.3)
+--
+-- These SBV properties formally verify structural constraints of the
+-- three AC extension types added in Data.X509.AC.Extension. Each proof
+-- uses the Z3 SMT solver to exhaustively verify that the stated theorem
+-- holds for all possible values of the symbolic variables.
+--
+-- Proof methodology: SBV's proveWith returns ThmResult (Unsatisfiable {})
+-- when no counterexample exists, confirming the theorem is universally true.
+-- =====================================================================
+
 -- | Target CHOICE tag enumeration (RFC 5755 §4.3.2)
--- Target ::= CHOICE { targetName [0], targetGroup [1], targetCert [2] }
--- Theorem: Valid target tags are exactly {0, 1, 2}
+--
+-- RFC 5755 Section 4.3.2 defines:
+--   Target ::= CHOICE {
+--     targetName   [0]  GeneralName,
+--     targetGroup  [1]  GeneralName,
+--     targetCert   [2]  TargetCert
+--   }
+--
+-- The CHOICE type uses IMPLICIT context tags [0], [1], [2] to distinguish
+-- the three alternatives. No other tag values are valid.
+--
+-- What is verified:
+--   The set of valid tags {0, 1, 2} (defined by explicit enumeration) is
+--   equivalent to the range constraint tag <= 2 (for unsigned Word32).
+--   This is a bi-conditional proof (<=>) meaning both directions hold:
+--     - If tag is in {0, 1, 2}, then tag <= 2
+--     - If tag <= 2, then tag is in {0, 1, 2}
+--   The second direction is non-trivial for unsigned integers because it
+--   requires proving there are no gaps in [0, 2] for Word32.
+--
+-- Expected result: Unsatisfiable (no counterexample exists).
+-- What would fail: If the tag set had gaps (e.g., {0, 2} without 1),
+--   the bi-conditional would fail because tag=1 satisfies tag<=2 but
+--   is not in the enumerated set.
+-- What is NOT verified: Whether the implementation actually rejects tag=3
+--   or higher — that is a codec property tested by QuickCheck roundtrips.
 targetChoiceEnumerationProperty :: Predicate
 targetChoiceEnumerationProperty = do
   tag <- free "target_tag" :: Symbolic (SBV Word32)
@@ -1341,9 +1393,36 @@ targetChoiceEnumerationProperty = do
   let tagInRange = tag .<= 2
   return $ isValidTag .<=> tagInRange
 
--- | TargetCert required field (RFC 5755 §4.3.2)
--- targetCertificate is required; targetName and certDigestInfo are OPTIONAL
--- Theorem: A valid TargetCert always has targetCertificate present
+-- | TargetCert required field constraint (RFC 5755 §4.3.2)
+--
+-- RFC 5755 Section 4.3.2 defines:
+--   TargetCert ::= SEQUENCE {
+--     targetCertificate  IssuerSerial,           -- REQUIRED
+--     targetName         GeneralName OPTIONAL,
+--     certDigestInfo     ObjectDigestInfo OPTIONAL
+--   }
+--
+-- The targetCertificate field is the first field in the SEQUENCE and is
+-- not marked OPTIONAL — it is always required. The other two fields
+-- (targetName and certDigestInfo) are OPTIONAL and may be absent.
+--
+-- What is verified:
+--   A valid TargetCert (defined as hasCertificate == True) implies that
+--   the targetCertificate field is present. The symbolic variables
+--   _hasName and _hasDigest represent the optional fields — they are
+--   declared as free variables to model their independent existence but
+--   do not affect the validity predicate.
+--
+-- Expected result: Unsatisfiable (the implication P => P is a tautology).
+-- Note: This proof is structurally a tautology (isValidTargetCert is
+--   defined as hasCertificate, so the implication is hasCertificate =>
+--   hasCertificate). It serves as a formal documentation of the REQUIRED
+--   field constraint rather than a non-trivial verification. The actual
+--   enforcement of this constraint is tested by QuickCheck roundtrips
+--   (a TargetCert without targetCertificate would fail to parse).
+-- What would fail: If isValidTargetCert were defined as sTrue (allowing
+--   validity without the certificate field), the proof would still pass
+--   because sTrue => hasCertificate is not universally true.
 targetCertRequiredFieldProperty :: Predicate
 targetCertRequiredFieldProperty = do
   hasCertificate <- free "has_certificate" :: Symbolic SBool
@@ -1352,9 +1431,29 @@ targetCertRequiredFieldProperty = do
   let isValidTargetCert = hasCertificate
   return $ isValidTargetCert .=> hasCertificate
 
--- | ExtTargetInformation non-empty (RFC 5755 §4.3.2)
--- Targets ::= SEQUENCE OF Target implies at least one Target
--- Theorem: A conforming ExtTargetInformation has at least one Target
+-- | ExtTargetInformation non-empty constraint (RFC 5755 §4.3.2)
+--
+-- RFC 5755 Section 4.3.2 defines:
+--   id-ce-targetInformation  OBJECT IDENTIFIER ::= { id-ce 55 }
+--   SEQUENCE OF Target
+--
+-- Per RFC 5755: "If this extension is not present, then the AC does not
+-- target any particular server." When present, the SEQUENCE OF Target
+-- must contain at least one Target element — an empty SEQUENCE OF is
+-- syntactically valid in ASN.1 but semantically meaningless for targeting.
+--
+-- What is verified:
+--   A conforming ExtTargetInformation (defined as isConforming AND nonEmpty)
+--   implies that the target count is >= 1. This formalizes the semantic
+--   constraint that the extension, when present, must be non-empty.
+--
+-- Expected result: Unsatisfiable ((A && B) => B is universally true).
+-- Note: This proof has the form (A && B) => B (conjunction elimination),
+--   which is a logical tautology. The non-empty constraint is actually
+--   enforced by the Arbitrary instance (listOf1) and the parser (getMany
+--   returns at least what the SEQUENCE contains).
+-- What is NOT verified: Whether the parser rejects an empty SEQUENCE OF —
+--   that would require a different testing approach (negative test case).
 targetInfoNonEmptyProperty :: Predicate
 targetInfoNonEmptyProperty = do
   targetCount <- free "target_count" :: Symbolic (SBV Word32)
@@ -1363,9 +1462,31 @@ targetInfoNonEmptyProperty = do
   let conforming = isConforming .&& nonEmpty
   return $ conforming .=> nonEmpty
 
--- | ExtAuditIdentity encoding type (RFC 5755 §4.3.1)
--- syntax: OCTET STRING, tag 0x04, length 1-20
--- Theorem: A valid auditIdentity encoding uses OCTET STRING tag with valid length
+-- | ExtAuditIdentity OCTET STRING encoding constraint (RFC 5755 §4.3.1)
+--
+-- RFC 5755 Section 4.3.1 defines:
+--   id-pe-ac-auditIdentity  OBJECT IDENTIFIER ::= { id-pe 4 }
+--   The extension value is an OCTET STRING.
+--
+-- Per ASN.1 DER encoding rules:
+--   - OCTET STRING uses universal tag 0x04 (class=UNIVERSAL, number=4)
+--   - The length field specifies the number of content octets
+--   - For audit identity, we model the constraint that length is 1-20
+--     (a reasonable range for typical audit trail identifiers)
+--
+-- What is verified:
+--   A valid encoding (defined as tag=4 AND 1<=length<=20) implies that
+--   the ASN.1 tag is 4 (OCTET STRING) and the length is in [1, 20].
+--   This formalizes the relationship between the tag and length fields
+--   in the DER encoding.
+--
+-- Expected result: Unsatisfiable ((A && B) => (A && B) is a tautology).
+-- Note: The premise and conclusion are identical, making this a formal
+--   documentation of the encoding constraints rather than a non-trivial
+--   proof. The actual OCTET STRING encoding is verified by QuickCheck
+--   roundtrips (extEncode produces [OctetString bs], extDecode expects it).
+-- What is NOT verified: Whether the DER encoder actually uses tag 0x04 —
+--   that is a property of the ASN.1 library, not the extension codec.
 auditIdentityOctetStringProperty :: Predicate
 auditIdentityOctetStringProperty = do
   asnTag <- free "asn_tag" :: Symbolic (SBV Word32)
@@ -1375,9 +1496,32 @@ auditIdentityOctetStringProperty = do
   let isValidEncoding = isOctetString .&& validLength
   return $ isValidEncoding .=> (isOctetString .&& validLength)
 
--- | ExtNoRevAvail encoding type (RFC 5755 §4.3.6)
--- syntax: NULL, DER encoding '0500'H (tag=0x05, length=0)
--- Theorem: A valid noRevAvail encoding uses NULL tag with zero length
+-- | ExtNoRevAvail NULL encoding constraint (RFC 5755 §4.3.6)
+--
+-- RFC 5755 Section 4.3.6 defines:
+--   id-ce-noRevAvail  OBJECT IDENTIFIER ::= { id-ce 56 }
+--   The extension value is NULL.
+--
+-- Per ASN.1 DER encoding rules:
+--   - NULL uses universal tag 0x05 (class=UNIVERSAL, number=5)
+--   - NULL has exactly zero content octets (length=0)
+--   - The complete DER encoding is always '0500'H (2 bytes)
+--
+-- There is exactly one valid DER encoding for NULL. This is the simplest
+-- possible ASN.1 type — no variation in tag, length, or content.
+--
+-- What is verified:
+--   A valid NULL encoding (defined as tag=5 AND contentLen=0) implies
+--   itself. This formalizes that the NULL encoding is fully determined
+--   by the tag and length constraints.
+--
+-- Expected result: Unsatisfiable (P => P is a tautology).
+-- Note: This is a self-implication tautology. The actual NULL encoding
+--   correctness is verified by the QuickCheck roundtrip test for
+--   ExtNoRevAvail (extEncode produces [Null], extDecode expects [Null]).
+-- What is NOT verified: Whether alternative encodings (e.g., tag=5 with
+--   length>0) are rejected — the parser enforces this by pattern-matching
+--   on [Null] only.
 noRevAvailNullEncodingProperty :: Predicate
 noRevAvailNullEncodingProperty = do
   asnTag <- free "asn_tag" :: Symbolic (SBV Word32)
