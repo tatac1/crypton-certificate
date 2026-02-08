@@ -27,6 +27,7 @@ library
         Data.X509.AttCert
         Data.X509.Attribute
         Data.X509.AlgorithmIdentifier
+        Data.X509.AC.Extension
 
     other-modules:
         Data.X509.Internal

@@ -49,11 +49,15 @@ module Data.X509AC (
     getAttributes,
     getValidity,
     getSerialNumber,
+
+    -- * AC Extensions
+    module Data.X509.AC.Extension,
 )
 where
 
 import qualified Data.ByteString as B
 import Data.X509.AttCert
+import Data.X509.AC.Extension
 import Data.X509.Attribute
 import Data.X509.Signed
 
