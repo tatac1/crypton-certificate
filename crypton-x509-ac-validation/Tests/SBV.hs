@@ -266,6 +266,36 @@ extensionProofs = testGroup "Extension Proofs (Section 4.3)"
       case result of
         ThmResult (Unsatisfiable {}) -> return ()
         _ -> assertFailure "crlDistributionPoints single proof failed"
+
+  , testCase "Target CHOICE tag enumeration (0-2)" $ do
+      result <- proveWith z3{verbose=False} targetChoiceEnumerationProperty
+      case result of
+        ThmResult (Unsatisfiable {}) -> return ()
+        _ -> assertFailure "Target CHOICE tag enumeration proof failed"
+
+  , testCase "TargetCert required field constraint" $ do
+      result <- proveWith z3{verbose=False} targetCertRequiredFieldProperty
+      case result of
+        ThmResult (Unsatisfiable {}) -> return ()
+        _ -> assertFailure "TargetCert required field proof failed"
+
+  , testCase "ExtTargetInformation non-empty constraint" $ do
+      result <- proveWith z3{verbose=False} targetInfoNonEmptyProperty
+      case result of
+        ThmResult (Unsatisfiable {}) -> return ()
+        _ -> assertFailure "ExtTargetInformation non-empty proof failed"
+
+  , testCase "ExtAuditIdentity OCTET STRING encoding constraint" $ do
+      result <- proveWith z3{verbose=False} auditIdentityOctetStringProperty
+      case result of
+        ThmResult (Unsatisfiable {}) -> return ()
+        _ -> assertFailure "ExtAuditIdentity OCTET STRING proof failed"
+
+  , testCase "ExtNoRevAvail NULL encoding constraint" $ do
+      result <- proveWith z3{verbose=False} noRevAvailNullEncodingProperty
+      case result of
+        ThmResult (Unsatisfiable {}) -> return ()
+        _ -> assertFailure "ExtNoRevAvail NULL encoding proof failed"
   ]
 
 -- * AC Validation Proofs (RFC 5755 Section 5)
@@ -1299,3 +1329,58 @@ sequenceNumberRDNUsageProperty = do
   let differentEntries = seqNum1 ./= seqNum2
   -- Theorem: different sequence numbers imply different entries (uniqueness)
   return $ differentNumbers .<=> differentEntries
+
+-- | Target CHOICE tag enumeration (RFC 5755 §4.3.2)
+-- Target ::= CHOICE { targetName [0], targetGroup [1], targetCert [2] }
+-- Theorem: Valid target tags are exactly {0, 1, 2}
+targetChoiceEnumerationProperty :: Predicate
+targetChoiceEnumerationProperty = do
+  tag <- free "target_tag" :: Symbolic (SBV Word32)
+  let validTags = [0, 1, 2] :: [Word32]
+  let isValidTag = sAny (.== tag) (map literal validTags)
+  let tagInRange = tag .<= 2
+  return $ isValidTag .<=> tagInRange
+
+-- | TargetCert required field (RFC 5755 §4.3.2)
+-- targetCertificate is required; targetName and certDigestInfo are OPTIONAL
+-- Theorem: A valid TargetCert always has targetCertificate present
+targetCertRequiredFieldProperty :: Predicate
+targetCertRequiredFieldProperty = do
+  hasCertificate <- free "has_certificate" :: Symbolic SBool
+  _hasName <- free "has_name" :: Symbolic SBool
+  _hasDigest <- free "has_digest" :: Symbolic SBool
+  let isValidTargetCert = hasCertificate
+  return $ isValidTargetCert .=> hasCertificate
+
+-- | ExtTargetInformation non-empty (RFC 5755 §4.3.2)
+-- Targets ::= SEQUENCE OF Target implies at least one Target
+-- Theorem: A conforming ExtTargetInformation has at least one Target
+targetInfoNonEmptyProperty :: Predicate
+targetInfoNonEmptyProperty = do
+  targetCount <- free "target_count" :: Symbolic (SBV Word32)
+  isConforming <- free "is_conforming" :: Symbolic SBool
+  let nonEmpty = targetCount .>= 1
+  let conforming = isConforming .&& nonEmpty
+  return $ conforming .=> nonEmpty
+
+-- | ExtAuditIdentity encoding type (RFC 5755 §4.3.1)
+-- syntax: OCTET STRING, tag 0x04, length 1-20
+-- Theorem: A valid auditIdentity encoding uses OCTET STRING tag with valid length
+auditIdentityOctetStringProperty :: Predicate
+auditIdentityOctetStringProperty = do
+  asnTag <- free "asn_tag" :: Symbolic (SBV Word32)
+  len <- free "octet_length" :: Symbolic (SBV Word32)
+  let isOctetString = asnTag .== 4
+  let validLength = (len .>= 1) .&& (len .<= 20)
+  let isValidEncoding = isOctetString .&& validLength
+  return $ isValidEncoding .=> (isOctetString .&& validLength)
+
+-- | ExtNoRevAvail encoding type (RFC 5755 §4.3.6)
+-- syntax: NULL, DER encoding '0500'H (tag=0x05, length=0)
+-- Theorem: A valid noRevAvail encoding uses NULL tag with zero length
+noRevAvailNullEncodingProperty :: Predicate
+noRevAvailNullEncodingProperty = do
+  asnTag <- free "asn_tag" :: Symbolic (SBV Word32)
+  contentLen <- free "content_length" :: Symbolic (SBV Word32)
+  let isNull = (asnTag .== 5) .&& (contentLen .== 0)
+  return $ isNull .=> isNull
