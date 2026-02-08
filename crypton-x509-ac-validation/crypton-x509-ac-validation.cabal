@@ -72,7 +72,8 @@ Test-Suite test-x509-ac-validation
 
   if flag(sbv-tests)
     Other-modules:   SBV
-    Build-Depends:   sbv >= 10.0
+    Build-Depends:   sbv >= 13.0
+                   , process
     cpp-options:     -DSBV_TESTS
 
 source-repository head

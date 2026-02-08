@@ -2,15 +2,20 @@
 resolver: lts-23.8
 
 packages:
-- x509
-- x509-store
-- x509-system
-- x509-validation
-- x509-util
+- crypton-x509
+- crypton-x509-store
+- crypton-x509-system
+- crypton-x509-validation
+- crypton-x509-util
 - crypton-x509-ac-validation
 
 extra-deps:
 - crypton-pem-0.3.0
+- crypton-asn1-encoding-0.10.0
+- crypton-asn1-parse-0.10.0
+- crypton-asn1-types-0.4.1
+- time-hourglass-0.3.0
+- sbv-13.5
 
 nix:
   pure: false

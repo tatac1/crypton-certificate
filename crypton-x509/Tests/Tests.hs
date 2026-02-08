@@ -141,7 +141,7 @@ arbitraryBS r1 r2 = choose (r1, r2) >>= \l -> (B.pack <$> replicateM l arbitrary
 
 -- | Generate a positive integer for use as AC serial numbers.
 --
--- RFC 5755 Section 4.2.2 (Serial Number):
+-- RFC 5755 Section 4.2.5 (Serial Number):
 --   "The serial number MUST be a positive INTEGER"
 --   "CAs conforming to this profile MUST NOT use serialNumber values longer
 --    than 20 octets."
@@ -169,7 +169,7 @@ arbitraryAscii = listOf1 $ elements (['a'..'z'] ++ ['0'..'9'])
 -- | Generate a random GeneralName (AltName) value.
 --
 -- RFC 5755 uses GeneralName (defined in RFC 5280 Section 4.2.1.6) extensively:
---   - Holder.entityName (Section 4.2.6): "SEQUENCE OF GeneralName"
+--   - Holder.entityName (Section 4.2.2): "SEQUENCE OF GeneralName"
 --   - AttCertIssuer.issuerName (Section 4.2.3): "SEQUENCE OF GeneralName"
 --   - Target.targetName/targetGroup (Section 4.3.2): "GeneralName"
 --
@@ -392,7 +392,7 @@ instance Arbitrary BitArray where
         unused <- choose (0, 7)
         pure $ toBitArray bs unused
 
--- | RFC 5755 Section 4.2.6.2 — DigestedObjectType enumeration
+-- | RFC 5755 Section 4.2.2 — DigestedObjectType enumeration
 --
 -- ASN.1 definition:
 --   DigestedObjectType ::= ENUMERATED {
@@ -409,7 +409,7 @@ instance Arbitrary BitArray where
 instance Arbitrary DigestedObjectType where
     arbitrary = elements [OIDPublicKey, OIDPublicKeyCert, OIDOtherObjectTypes]
 
--- | RFC 5755 Section 4.2.6.2 — ObjectDigestInfo
+-- | RFC 5755 Section 4.2.2 — ObjectDigestInfo
 --
 -- ASN.1 definition:
 --   ObjectDigestInfo ::= SEQUENCE {
@@ -443,7 +443,7 @@ instance Arbitrary ObjectDigestInfo where
         digest <- B.pack <$> vectorOf 32 arbitrary
         pure $ ObjectDigestInfo dot oid alg digest
 
--- | RFC 5755 Section 4.2.6.1 — IssuerSerial
+-- | RFC 5755 Section 4.2.2 — IssuerSerial
 --
 -- ASN.1 definition:
 --   IssuerSerial ::= SEQUENCE {
@@ -453,7 +453,7 @@ instance Arbitrary ObjectDigestInfo where
 --   }
 --
 -- GeneralNames is "SEQUENCE OF GeneralName" with at least one element.
--- CertificateSerialNumber is an INTEGER (must be positive per Section 4.2.2).
+-- CertificateSerialNumber is an INTEGER (must be positive per Section 4.2.5).
 -- issuerUID is an OPTIONAL BIT STRING (UniqueIdentifier).
 --
 -- This generator produces:
@@ -472,7 +472,7 @@ instance Arbitrary IssuerSerial where
             <*> arbitraryPositive
             <*> pure Nothing
 
--- | RFC 5755 Section 4.2.6 — Holder
+-- | RFC 5755 Section 4.2.2 — Holder
 --
 -- ASN.1 definition:
 --   Holder ::= SEQUENCE {
@@ -481,7 +481,7 @@ instance Arbitrary IssuerSerial where
 --     objectDigestInfo   [2]  ObjectDigestInfo OPTIONAL
 --   }
 --
--- Per RFC 5755 Section 4.2.6: "For any environment, the holder field
+-- Per RFC 5755 Section 4.2.2: "For any environment, the holder field
 -- MUST be populated. [...] At least one of the three options MUST be
 -- used." A Holder with all three fields absent is invalid.
 --
@@ -567,7 +567,7 @@ instance Arbitrary AttCertIssuer where
             , AttCertIssuerV2 <$> arbitrary
             ]
 
--- | RFC 5755 Section 4.2.4 — AttCertValidityPeriod
+-- | RFC 5755 Section 4.2.6 — AttCertValidityPeriod
 --
 -- ASN.1 definition:
 --   AttCertValidityPeriod ::= SEQUENCE {
@@ -618,7 +618,7 @@ instance Arbitrary Attributes where
         uri <- ("https://" ++) <$> arbitraryAscii
         pure $ Attributes [encodeAttribute [mkRole uri]]
 
--- | RFC 5755 Section 4 — AttributeCertificateInfo (the unsigned AC body)
+-- | RFC 5755 Section 4.1 — AttributeCertificateInfo (the unsigned AC body)
 --
 -- ASN.1 definition:
 --   AttributeCertificateInfo ::= SEQUENCE {
@@ -640,11 +640,11 @@ instance Arbitrary Attributes where
 -- This generator produces AttributeCertificateInfo with:
 --   - version: fixed at 1 (v2) — the ONLY valid version per RFC 5755.
 --     Version v1 (value 0) is NOT backwards-compatible and MUST NOT be used.
---   - holder: random Holder (Section 4.2.6)
+--   - holder: random Holder (Section 4.2.2)
 --   - issuer: random AttCertIssuer (Section 4.2.3)
 --   - signature: random AlgorithmIdentifier
---   - serialNumber: positive integer (Section 4.2.2)
---   - attrCertValidityPeriod: random time pair (Section 4.2.4)
+--   - serialNumber: positive integer (Section 4.2.5)
+--   - attrCertValidityPeriod: random time pair (Section 4.2.6)
 --   - attributes: random Attributes (Section 4.2.7)
 --   - issuerUniqueID: always Nothing (optional, rarely used)
 --   - extensions: always Nothing (optional, tested separately)
@@ -770,7 +770,7 @@ instance Arbitrary Attr_SvceAuthInfo where
 instance Arbitrary Attr_AccessIdentity where
     arbitrary = Attr_AccessIdentity <$> arbitrary
 
--- | RFC 4476 / RFC 5755 Section 4.4.6 — IetfAttrSyntax value (CHOICE)
+-- | RFC 4476 / RFC 5755 Section 4.4 — IetfAttrSyntax value (CHOICE)
 --
 -- ASN.1 definition:
 --   IetfAttrSyntax ::= SEQUENCE {
@@ -799,7 +799,7 @@ instance Arbitrary IetfAttrSyntaxValue where
             , IetfAttrSyntaxString <$> arbitraryAscii
             ]
 
--- | RFC 4476 / RFC 5755 Section 4.4.6 — IetfAttrSyntax
+-- | RFC 4476 / RFC 5755 Section 4.4 — IetfAttrSyntax
 --
 -- Used by both ChargingIdentity and Group attributes.
 --
@@ -1088,14 +1088,14 @@ main =
                   -- =============================================================
                 , testGroup
                     "attribute-certificate"
-                    [ -- | RFC 5755 Section 4.2.4 — AttCertValidityPeriod
+                    [ -- | RFC 5755 Section 4.2.6 — AttCertValidityPeriod
                       -- Verifies: SEQUENCE { GeneralizedTime, GeneralizedTime } roundtrip.
                       -- Both notBeforeTime and notAfterTime must encode as GeneralizedTime
                       -- (not UTCTime) and decode back to the same DateTime values.
                       testProperty
                         "attCertValidityPeriod"
                         (property_unmarshall_marshall_id :: AttCertValidityPeriod -> Bool)
-                      -- | RFC 5755 Section 4.2.6.1 — IssuerSerial
+                      -- | RFC 5755 Section 4.2.2 — IssuerSerial
                       -- Verifies: SEQUENCE { GeneralNames, INTEGER, [OPTIONAL BIT STRING] }
                       -- The issuer field (SEQUENCE OF GeneralName) must contain at least one
                       -- element. The serial must be a positive INTEGER. The optional issuerUID
@@ -1103,7 +1103,7 @@ main =
                     , testProperty
                         "issuerSerial"
                         (property_unmarshall_marshall_id :: IssuerSerial -> Bool)
-                      -- | RFC 5755 Section 4.2.6.2 — ObjectDigestInfo
+                      -- | RFC 5755 Section 4.2.2 — ObjectDigestInfo
                       -- Verifies: SEQUENCE { ENUMERATED, [OPTIONAL OID], AlgId, BIT STRING }
                       -- The conditional otherObjectTypeID field must be present when
                       -- digestedObjectType is otherObjectTypes (2) and absent otherwise.
@@ -1111,7 +1111,7 @@ main =
                     , testProperty
                         "objectDigestInfo"
                         (property_unmarshall_marshall_id :: ObjectDigestInfo -> Bool)
-                      -- | RFC 5755 Section 4.2.6 — Holder
+                      -- | RFC 5755 Section 4.2.2 — Holder
                       -- Verifies: SEQUENCE { [0] IssuerSerial OPTIONAL,
                       --   [1] GeneralNames OPTIONAL, [2] ObjectDigestInfo OPTIONAL }
                       -- All three fields use IMPLICIT context tags. The parser must correctly
@@ -1138,7 +1138,7 @@ main =
                     , testProperty
                         "attCertIssuer"
                         (property_unmarshall_marshall_id :: AttCertIssuer -> Bool)
-                      -- | RFC 5755 Section 4 — AttributeCertificateInfo (complete AC body)
+                      -- | RFC 5755 Section 4.1 — AttributeCertificateInfo (complete AC body)
                       -- Verifies the entire AC structure roundtrip:
                       --   SEQUENCE { INTEGER (version=1), Holder, AttCertIssuer,
                       --     AlgorithmIdentifier, INTEGER (serial), AttCertValidityPeriod,
