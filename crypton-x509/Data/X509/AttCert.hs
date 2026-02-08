@@ -225,8 +225,10 @@ parseObjectDigestInfoContent = do
 parseObjectDigestInfo :: ParseASN1 ObjectDigestInfo
 parseObjectDigestInfo = onNextContainer Sequence parseObjectDigestInfoContent
 
-parseV2Form :: ParseASN1 V2Form
-parseV2Form = onNextContainer Sequence $ do
+-- | Parse V2Form content (without outer SEQUENCE wrapper).
+-- Used for IMPLICIT tagged context where [0] replaces V2Form's SEQUENCE.
+parseV2FormContent :: ParseASN1 V2Form
+parseV2FormContent = do
     -- issuerName: GeneralNames ::= SEQUENCE SIZE (1..MAX) OF GeneralName
     issuerName <- parseGeneralNames
 
@@ -240,6 +242,10 @@ parseV2Form = onNextContainer Sequence $ do
         onNextContainerMaybe (Container Context 1) parseObjectDigestInfoContent
 
     return $ V2Form issuerName baseCertID objDigestInfo
+
+-- | Parse V2Form with outer SEQUENCE wrapper (for standalone use)
+parseV2Form :: ParseASN1 V2Form
+parseV2Form = onNextContainer Sequence parseV2FormContent
 
 -- | Parse Holder from ASN.1
 -- RFC 5755 allows multiple optional fields to be present simultaneously
@@ -266,17 +272,12 @@ parseHolder = onNextContainer Sequence $ do
 
 parseAttCertIssuer :: ParseASN1 AttCertIssuer
 parseAttCertIssuer = do
-    mV2Form <- onNextContainerMaybe (Container Context 0) parseV2Form
+    -- IMPLICIT [0] replaces V2Form's SEQUENCE, so parse content directly
+    mV2Form <- onNextContainerMaybe (Container Context 0) parseV2FormContent
     case mV2Form of
         Just v2 -> return $ AttCertIssuerV2 v2
-        Nothing -> do
-            -- V1 encodes as GeneralNames which is SEQUENCE OF GeneralName.
-            -- onNextContainerMaybe Sequence already strips the outer SEQUENCE,
-            -- so we parse the GeneralName elements directly with getMany.
-            mGeneralNames <- onNextContainerMaybe Sequence (getMany parseGeneralName)
-            case mGeneralNames of
-                Just gn -> return $ AttCertIssuerV1 gn
-                Nothing -> throwParseError "AttCertIssuer: unknown choice"
+        -- v1Form: GeneralNames (SEQUENCE OF GeneralName) appears directly
+        Nothing -> AttCertIssuerV1 <$> parseGeneralNames
 
 -- | Parse AttributeCertificateInfo content (without outer SEQUENCE)
 -- This matches the pattern used by Certificate in Data.X509.Cert
@@ -309,6 +310,20 @@ parseAttributeCertificateInfoContent = do
 -- Used when parsing from raw ASN.1 (e.g., for testing)
 parseAttributeCertificateInfo :: ParseASN1 AttributeCertificateInfo
 parseAttributeCertificateInfo = onNextContainer Sequence parseAttributeCertificateInfoContent
+
+-- | Encode V2Form content (without outer SEQUENCE)
+-- Used for IMPLICIT tagged context where [0] replaces V2Form's SEQUENCE
+encodeV2FormContent :: V2Form -> [ASN1]
+encodeV2FormContent (V2Form issuerName baseCertID objDigestInfo) =
+    encodeGeneralNames issuerName
+        ++ maybe
+            []
+            (\x -> asn1Container (Container Context 0) (encodeIssuerSerialContent x))
+            baseCertID
+        ++ maybe
+            []
+            (\x -> asn1Container (Container Context 1) (encodeObjectDigestInfoContent x))
+            objDigestInfo
 
 -- | Encode IssuerSerial content (without outer SEQUENCE)
 -- Used for IMPLICIT tagged context where the tag replaces the SEQUENCE
@@ -382,7 +397,8 @@ instance ASN1Object Holder where
 
 instance ASN1Object AttCertIssuer where
     toASN1 (AttCertIssuerV1 generalNames) xs = encodeGeneralNames generalNames ++ xs
-    toASN1 (AttCertIssuerV2 v2Form) xs = asn1Container (Container Context 0) (toASN1 v2Form []) ++ xs
+    -- IMPLICIT [0] replaces V2Form's SEQUENCE, so encode content directly inside [0]
+    toASN1 (AttCertIssuerV2 v2) xs = asn1Container (Container Context 0) (encodeV2FormContent v2) ++ xs
     fromASN1 = runParseASN1State parseAttCertIssuer
 
 instance ASN1Object AttributeCertificateInfo where

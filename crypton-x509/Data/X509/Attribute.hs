@@ -263,13 +263,16 @@ instance IsAttribute Attr_Role where
 
 parseRoleSyntax :: ParseASN1 RoleSyntax
 parseRoleSyntax = do
-    auth <- onNextContainerMaybe (Container Context 0) parseGeneralNames
+    -- IMPLICIT [0]: the SEQUENCE tag of GeneralNames is replaced by [0],
+    -- so inside [0] we directly have GeneralName elements (no inner SEQUENCE).
+    auth <- onNextContainerMaybe (Container Context 0) (getMany parseGeneralName)
     name <- onNextContainer (Container Context 1) parseGeneralName
     return $ RoleSyntax auth name
 
 encodeRoleSyntax :: RoleSyntax -> [ASN1]
 encodeRoleSyntax (RoleSyntax auth name) =
-    maybe [] (\a -> asn1Container (Container Context 0) (encodeGeneralNames a)) auth
+    -- IMPLICIT [0]: no inner SEQUENCE; GeneralName elements directly inside [0]
+    maybe [] (\a -> asn1Container (Container Context 0) (concatMap encodeGeneralName a)) auth
         ++ asn1Container (Container Context 1) (encodeGeneralName name)
 
 -- | Service Authentication Information attribute from RFC 5755 section 4.4.1
@@ -329,7 +332,9 @@ instance IsAttribute Attr_Group where
 parseIetfAttrSyntax :: ParseASN1 IetfAttrSyntax
 parseIetfAttrSyntax =
     IetfAttrSyntax
-        <$> onNextContainerMaybe (Container Context 0) parseGeneralNames
+        -- IMPLICIT [0]: the SEQUENCE tag of GeneralNames is replaced by [0],
+        -- so inside [0] we directly have GeneralName elements (no inner SEQUENCE).
+        <$> onNextContainerMaybe (Container Context 0) (getMany parseGeneralName)
         <*> onNextContainer Sequence (getMany parseIetfValue)
 
 parseIetfValue :: ParseASN1 IetfAttrSyntaxValue
@@ -344,9 +349,10 @@ parseIetfValue =
 
 encodeIetfAttrSyntax :: IetfAttrSyntax -> [ASN1]
 encodeIetfAttrSyntax (IetfAttrSyntax authority values) =
+    -- IMPLICIT [0]: no inner SEQUENCE; GeneralName elements directly inside [0]
     maybe
         []
-        (\gns -> asn1Container (Container Context 0) (encodeGeneralNames gns))
+        (\gns -> asn1Container (Container Context 0) (concatMap encodeGeneralName gns))
         authority
         ++ asn1Container Sequence (map encodeIetfValue values)
 

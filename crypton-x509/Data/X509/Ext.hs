@@ -299,7 +299,7 @@ instance Extension ExtCrlDistributionPoints where
 parseGeneralName :: ParseASN1 AltName
 parseGeneralName = do
     m <- onNextContainerMaybe (Container Context 0) getComposedAddr
-    maybe getDirOrSimpleAddr return m
+    maybe getSimpleAddr return m
   where
     getComposedAddr = do
         n <- getNext
@@ -328,19 +328,16 @@ parseGeneralName = do
             OID unknown -> throwParseError ("GeneralNames: unknown OID " ++ show unknown)
             _ -> throwParseError ("GeneralNames: expecting OID but got " ++ show n)
 
-    -- Try directoryName [4] IMPLICIT first (constructed, uses onNextContainer to
-    -- properly consume both Start and End tags), then fall back to simple addresses.
-    getDirOrSimpleAddr = do
-        mDir <- onNextContainerMaybe (Container Context 4) getObject
-        case mDir of
-            Just dn -> return $ AltDirectoryName dn
-            Nothing -> getSimpleAddr
-
     getSimpleAddr = do
         n <- getNext
         case n of
             (Other Context 1 b) -> return $ AltNameRFC822 $ BC.unpack b
             (Other Context 2 b) -> return $ AltNameDNS $ BC.unpack b
+            -- RFC 5280 §4.2.1.6: directoryName [4] is EXPLICIT (CHOICE in IMPLICIT TAGS module)
+            (Start (Container Context 4)) -> do
+                dn <- getObject
+                End (Container Context 4) <- getNext
+                return $ AltDirectoryName dn
             (Other Context 6 b) -> return $ AltNameURI $ BC.unpack b
             (Other Context 7 b) -> return $ AltNameIP b
             _ ->
