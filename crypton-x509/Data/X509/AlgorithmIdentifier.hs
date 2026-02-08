@@ -192,4 +192,7 @@ instance ASN1Object SignatureALG where
             : End Sequence
             : xs
     toASN1 signatureAlg@(SignatureALG_IntrinsicHash _) = \xs -> Start Sequence : OID (sigOID signatureAlg) : End Sequence : xs
+    -- RFC 5758 §3.2: ECDSA parameters MUST be absent; RFC 3279 §2.2.2: DSA parameters MUST be absent
+    toASN1 signatureAlg@(SignatureALG _ PubKeyALG_EC) = \xs -> Start Sequence : OID (sigOID signatureAlg) : End Sequence : xs
+    toASN1 signatureAlg@(SignatureALG _ PubKeyALG_DSA) = \xs -> Start Sequence : OID (sigOID signatureAlg) : End Sequence : xs
     toASN1 signatureAlg = \xs -> Start Sequence : OID (sigOID signatureAlg) : Null : End Sequence : xs

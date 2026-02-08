@@ -43,7 +43,7 @@ import Data.ASN1.BitArray
 import Data.ASN1.Parse
 import Data.ASN1.Types
 import qualified Data.ByteString as B
-import Data.Hourglass (DateTime)
+import Data.Hourglass (DateTime, TimezoneOffset (..))
 import Data.X509.AlgorithmIdentifier
 import Data.X509.Attribute hiding (GeneralName)
 import Data.X509.Ext (AltName (..))
@@ -147,10 +147,11 @@ data AttCertValidityPeriod = AttCertValidityPeriod
 type UniqueID = BitArray
 
 instance ASN1Object AttCertValidityPeriod where
+    -- RFC 5755 §4.2.6: GeneralizedTime MUST be in UTC (YYYYMMDDHHMMSSZ)
     toASN1 (AttCertValidityPeriod notBefore notAfter) xs =
         [ Start Sequence
-        , ASN1Time TimeGeneralized notBefore Nothing
-        , ASN1Time TimeGeneralized notAfter Nothing
+        , ASN1Time TimeGeneralized notBefore (Just (TimezoneOffset 0))
+        , ASN1Time TimeGeneralized notAfter (Just (TimezoneOffset 0))
         , End Sequence
         ]
             ++ xs
