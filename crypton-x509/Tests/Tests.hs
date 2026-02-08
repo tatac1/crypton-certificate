@@ -17,9 +17,11 @@ import qualified Crypto.PubKey.DSA as DSA
 import qualified Crypto.PubKey.Ed25519 as Ed25519
 import qualified Crypto.PubKey.Ed448 as Ed448
 import qualified Crypto.PubKey.RSA as RSA
+import Data.ASN1.BitArray
 import Data.ASN1.Types
 import Data.List (nub, sort)
 import Data.X509
+import Data.X509AC
 
 import Data.Hourglass
 
@@ -137,6 +139,22 @@ instance Arbitrary SignatureALG where
 
 arbitraryBS r1 r2 = choose (r1, r2) >>= \l -> (B.pack <$> replicateM l arbitrary)
 
+arbitraryPositive :: Gen Integer
+arbitraryPositive = choose (1, 2 ^ (64 :: Int))
+
+arbitraryAscii :: Gen String
+arbitraryAscii = listOf1 $ elements (['a'..'z'] ++ ['0'..'9'])
+
+arbitraryAltName :: Gen AltName
+arbitraryAltName =
+    oneof
+        [ AltNameRFC822 <$> arbitraryAscii
+        , AltNameDNS <$> arbitraryAscii
+        , AltNameURI <$> (("https://" ++) <$> arbitraryAscii)
+        , AltNameIP <$> arbitraryBS 4 4
+        , AltDirectoryName <$> arbitrary
+        ]
+
 instance Arbitrary ASN1StringEncoding where
     arbitrary = elements [IA5, UTF8]
 
@@ -183,6 +201,149 @@ instance Arbitrary ExtKeyUsagePurpose where
             ]
 instance Arbitrary ExtExtendedKeyUsage where
     arbitrary = ExtExtendedKeyUsage . nub <$> listOf1 arbitrary
+
+-- AC Extension types
+instance Arbitrary ExtNoRevAvail where
+    arbitrary = pure ExtNoRevAvail
+
+instance Arbitrary ExtAuditIdentity where
+    arbitrary = ExtAuditIdentity <$> arbitraryBS 1 20
+
+instance Arbitrary Target where
+    arbitrary =
+        oneof
+            [ TargetName <$> arbitraryAltName
+            , TargetGroup <$> arbitraryAltName
+            ]
+
+instance Arbitrary ExtTargetInformation where
+    arbitrary = ExtTargetInformation <$> listOf1 arbitrary
+
+-- AC core types
+instance Arbitrary BitArray where
+    arbitrary = do
+        len <- choose (1, 8)
+        bs <- B.pack <$> vectorOf len arbitrary
+        unused <- choose (0, 7)
+        pure $ toBitArray bs unused
+
+instance Arbitrary DigestedObjectType where
+    arbitrary = elements [OIDPublicKey, OIDPublicKeyCert, OIDOtherObjectTypes]
+
+instance Arbitrary ObjectDigestInfo where
+    arbitrary = do
+        dot <- arbitrary
+        oid <- case dot of
+            OIDOtherObjectTypes -> Just <$> arbitrary
+            _ -> pure Nothing
+        alg <- arbitrary
+        digest <- B.pack <$> vectorOf 32 arbitrary
+        pure $ ObjectDigestInfo dot oid alg digest
+
+instance Arbitrary IssuerSerial where
+    arbitrary =
+        IssuerSerial
+            <$> listOf1 arbitraryAltName
+            <*> arbitraryPositive
+            <*> pure Nothing
+
+instance Arbitrary Holder where
+    arbitrary =
+        Holder
+            <$> arbitrary
+            <*> oneof [pure Nothing, Just <$> listOf1 arbitraryAltName]
+            <*> arbitrary
+
+instance Arbitrary V2Form where
+    arbitrary =
+        V2Form
+            <$> listOf1 arbitraryAltName
+            <*> arbitrary
+            <*> arbitrary
+
+instance Arbitrary AttCertIssuer where
+    arbitrary =
+        oneof
+            [ AttCertIssuerV1 <$> listOf1 arbitraryAltName
+            , AttCertIssuerV2 <$> arbitrary
+            ]
+
+instance Arbitrary AttCertValidityPeriod where
+    arbitrary = AttCertValidityPeriod <$> arbitrary <*> arbitrary
+
+instance Arbitrary Attributes where
+    arbitrary = do
+        let mkRole uri = Attr_Role $ RoleSyntax Nothing (AltNameURI uri)
+        uri <- ("https://" ++) <$> arbitraryAscii
+        pure $ Attributes [encodeAttribute [mkRole uri]]
+
+instance Arbitrary AttributeCertificateInfo where
+    arbitrary =
+        AttributeCertificateInfo 1
+            <$> arbitrary
+            <*> arbitrary
+            <*> arbitrary
+            <*> arbitraryPositive
+            <*> arbitrary
+            <*> arbitrary
+            <*> pure Nothing
+            <*> pure (Extensions Nothing)
+
+-- Attribute syntax types
+instance Arbitrary RoleSyntax where
+    arbitrary =
+        RoleSyntax
+            <$> pure Nothing
+            <*> arbitraryAltName
+
+instance Arbitrary Attr_Role where
+    arbitrary = Attr_Role <$> arbitrary
+
+instance Arbitrary SvceAuthInfo where
+    arbitrary =
+        SvceAuthInfo
+            <$> arbitraryAltName
+            <*> arbitraryAltName
+            <*> oneof [pure Nothing, Just <$> arbitraryBS 1 20]
+
+instance Arbitrary Attr_SvceAuthInfo where
+    arbitrary = Attr_SvceAuthInfo <$> arbitrary
+
+instance Arbitrary Attr_AccessIdentity where
+    arbitrary = Attr_AccessIdentity <$> arbitrary
+
+instance Arbitrary IetfAttrSyntaxValue where
+    arbitrary =
+        oneof
+            [ IetfAttrSyntaxOctets <$> arbitraryBS 1 20
+            , IetfAttrSyntaxOid <$> arbitrary
+            , IetfAttrSyntaxString <$> arbitraryAscii
+            ]
+
+instance Arbitrary IetfAttrSyntax where
+    arbitrary =
+        IetfAttrSyntax
+            <$> pure Nothing
+            <*> listOf1 arbitrary
+
+instance Arbitrary Attr_ChargingIdentity where
+    arbitrary = Attr_ChargingIdentity <$> arbitrary
+
+instance Arbitrary Attr_Group where
+    arbitrary = Attr_Group <$> arbitrary
+
+instance Arbitrary ClassListFlag where
+    arbitrary = elements $ enumFrom ClassList_unmarked
+
+instance Arbitrary Clearance where
+    arbitrary =
+        Clearance
+            <$> arbitrary
+            <*> (sort . nub <$> listOf1 arbitrary)
+            <*> pure Nothing
+
+instance Arbitrary Attr_Clearance where
+    arbitrary = Attr_Clearance <$> arbitrary
 
 instance Arbitrary Certificate where
     arbitrary =
@@ -251,6 +412,17 @@ property_extension_id e = case extDecode (extEncode e) of
         | v == e -> True
         | otherwise -> error ("expected " ++ show e ++ " got: " ++ show v)
 
+property_attribute_id
+    :: (Show a, Eq a, IsAttribute a) => a -> Bool
+property_attribute_id a =
+    case attrDecode (head (attrEncode a)) of
+        Right v
+            | v == a -> True
+            | otherwise ->
+                error ("attribute is different: " ++ show v ++ " expecting " ++ show a)
+        Left err ->
+            error ("attribute decode failed: " ++ err ++ " for: " ++ show a)
+
 main =
     defaultMain $
         testGroup
@@ -276,5 +448,44 @@ main =
                     "certificate"
                     (property_unmarshall_marshall_id :: Certificate -> Bool)
                 , testProperty "crl" (property_unmarshall_marshall_id :: CRL -> Bool)
+                , testGroup
+                    "ac-extension"
+                    [ testProperty "noRevAvail" (property_extension_id :: ExtNoRevAvail -> Bool)
+                    , testProperty "auditIdentity" (property_extension_id :: ExtAuditIdentity -> Bool)
+                    , testProperty "targetInformation" (property_extension_id :: ExtTargetInformation -> Bool)
+                    ]
+                , testGroup
+                    "attribute-certificate"
+                    [ testProperty
+                        "attCertValidityPeriod"
+                        (property_unmarshall_marshall_id :: AttCertValidityPeriod -> Bool)
+                    , testProperty
+                        "issuerSerial"
+                        (property_unmarshall_marshall_id :: IssuerSerial -> Bool)
+                    , testProperty
+                        "objectDigestInfo"
+                        (property_unmarshall_marshall_id :: ObjectDigestInfo -> Bool)
+                    , testProperty
+                        "holder"
+                        (property_unmarshall_marshall_id :: Holder -> Bool)
+                    , testProperty
+                        "v2Form"
+                        (property_unmarshall_marshall_id :: V2Form -> Bool)
+                    , testProperty
+                        "attCertIssuer"
+                        (property_unmarshall_marshall_id :: AttCertIssuer -> Bool)
+                    , testProperty
+                        "attributeCertificateInfo"
+                        (property_unmarshall_marshall_id :: AttributeCertificateInfo -> Bool)
+                    ]
+                , testGroup
+                    "ac-attribute"
+                    [ testProperty "role" (property_attribute_id :: Attr_Role -> Bool)
+                    , testProperty "svceAuthInfo" (property_attribute_id :: Attr_SvceAuthInfo -> Bool)
+                    , testProperty "accessIdentity" (property_attribute_id :: Attr_AccessIdentity -> Bool)
+                    , testProperty "chargingIdentity" (property_attribute_id :: Attr_ChargingIdentity -> Bool)
+                    , testProperty "group" (property_attribute_id :: Attr_Group -> Bool)
+                    , testProperty "clearance" (property_attribute_id :: Attr_Clearance -> Bool)
+                    ]
                 ]
             ]

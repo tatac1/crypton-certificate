@@ -270,7 +270,10 @@ parseAttCertIssuer = do
     case mV2Form of
         Just v2 -> return $ AttCertIssuerV2 v2
         Nothing -> do
-            mGeneralNames <- onNextContainerMaybe Sequence parseGeneralNames
+            -- V1 encodes as GeneralNames which is SEQUENCE OF GeneralName.
+            -- onNextContainerMaybe Sequence already strips the outer SEQUENCE,
+            -- so we parse the GeneralName elements directly with getMany.
+            mGeneralNames <- onNextContainerMaybe Sequence (getMany parseGeneralName)
             case mGeneralNames of
                 Just gn -> return $ AttCertIssuerV1 gn
                 Nothing -> throwParseError "AttCertIssuer: unknown choice"
