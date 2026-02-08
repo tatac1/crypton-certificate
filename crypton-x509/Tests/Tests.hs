@@ -209,11 +209,19 @@ instance Arbitrary ExtNoRevAvail where
 instance Arbitrary ExtAuditIdentity where
     arbitrary = ExtAuditIdentity <$> arbitraryBS 1 20
 
+instance Arbitrary TargetCertDescription where
+    arbitrary =
+        TargetCertDescription
+            <$> arbitrary
+            <*> pure Nothing
+            <*> pure Nothing
+
 instance Arbitrary Target where
     arbitrary =
         oneof
             [ TargetName <$> arbitraryAltName
             , TargetGroup <$> arbitraryAltName
+            , TargetCert <$> arbitrary
             ]
 
 instance Arbitrary ExtTargetInformation where
