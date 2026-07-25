@@ -1,0 +1,78 @@
+cabal-version:      >=1.10
+name:               crypton-x509-ac-validation
+version:            0.1.0
+license:            BSD3
+license-file:       LICENSE
+copyright:          Toru Tomita <toru.tomita@gmail.com>
+maintainer:         Toru Tomita <toru.tomita@gmail.com>
+author:             Toru Tomita <toru.tomita@gmail.com>
+stability:          experimental
+homepage:           https://github.com/kazu-yamamoto/crypton-certificate
+synopsis:           X.509 Attribute Certificate validation (RFC 5755)
+description:
+    This library provides validation functions for X.509 Attribute
+    Certificates as defined in RFC 5755.
+    .
+    Features include:
+    .
+    * Signature verification for Attribute Certificates
+    * Validity period checking (notBefore/notAfter)
+    * Issuer certificate chain validation
+    * Revocation checking via Attribute Certificate Revocation Lists (ACRLs)
+    * RFC 5755 profile compliance validation
+    .
+    The library integrates with crypton-x509-validation for PKI operations
+    and follows the security requirements of RFC 5755 Section 5.
+
+category:           Data
+build-type:         Simple
+
+source-repository head
+    type:     git
+    location: https://github.com/kazu-yamamoto/crypton-certificate
+    subdir:   crypton-x509-ac-validation
+
+library
+    exposed-modules:
+        Data.X509.AC.Validation
+        Data.X509.AC.Validation.Signature
+        Data.X509.AC.Validation.Validity
+        Data.X509.AC.Validation.Path
+        Data.X509.AC.Validation.Revocation
+
+    default-language: Haskell2010
+    ghc-options:      -Wall
+    build-depends:
+        base >=4.7 && <5,
+        bytestring,
+        crypton-asn1-types >=0.4.1 && <0.5,
+        crypton-x509 >=1.9.1,
+        crypton-x509-validation >=1.9.1,
+        time-hourglass
+
+test-suite test-x509-ac-validation
+    type:             exitcode-stdio-1.0
+    main-is:          Tests.hs
+    hs-source-dirs:   Tests
+    other-modules:
+        Certificate
+        StaticTests
+        TestACValidation
+        TestVectors
+
+    default-language: Haskell2010
+    ghc-options:      -Wall -fno-warn-orphans -fno-warn-missing-signatures
+    build-depends:
+        base >=3 && <5,
+        bytestring,
+        crypton,
+        crypton-asn1-encoding,
+        crypton-asn1-types,
+        crypton-x509,
+        crypton-x509-ac-validation,
+        crypton-x509-validation,
+        ram,
+        tasty,
+        tasty-hunit,
+        tasty-quickcheck,
+        time-hourglass
