@@ -44,13 +44,21 @@ upstream の露出パターン（`Data.X509` / `Data.X509.EC` のみ公開、実
 - pr-clean が行っていた `AlgorithmIdentifier` の expose 化は撤回（`Data.X509` が `module Data.X509.AlgorithmIdentifier` を丸ごと再 export 済みで不要）
 - ファサードには pattern synonym（`HolderBaseCertificateID` 等）を含む、PR#3 が必要とする全シンボルを再 export する（現状の pr-clean ファサードは pattern synonym 非掲載のため補完）
 
-### D4: `Ext.hs` への変更は「export 追加」のみ
+### D4: `Ext.hs` は内部関数の rename ＋ export（実装時改訂）
 
-`Data.X509.Attribute` は GeneralName の parse / encode を必要とする。upstream の name-constraints 実装で `getAddr` / `encodeAltName` が既にトップレベル化されている（未 export）ため、**export リストへの追加のみ**行い、pr-clean の rename（`getAddr` → `parseGeneralName`）は不要な churn として撤回。upstream 自身が直近で `recognizedOIDs` に同じ操作をしており、スタイル整合する。
+`Data.X509.Attribute` は GeneralName の parse / encode を必要とする。当初は「upstream の内部名 `getAddr` / `encodeAltName` の export 追加のみ」としたが、実装時に以下の理由で **rename（`getAddr`→`parseGeneralName`, `encodeAltName`→`encodeGeneralName`）＋ export** に改訂した:
 
-### D5: テストは新規ファイルに分離
+- AC モジュール側は良い名前（`parseGeneralName` 等）を 17 箇所以上で参照しており、AC 側を書き換えるより Ext.hs 内部（呼出 6 箇所）を rename する方が変更総量が小さい
+- 両関数は module-private だったため rename は外部から観測不能（公開 API 変更なし）
+- `getAddr` を `Data.X509` 経由の公開名にするのは API として不適切
 
-pr-clean は既存 `Tests/Tests.hs` に 932 行を追記していた。既存ファイルの diff を数行（hook のみ）に抑えるため `Tests/TestAC.hs` に分離し、cabal の other-modules に追加する。
+公開されるのは `parseGeneralName` / `parseGeneralNames` / `encodeGeneralName` / `encodeGeneralNames` の 4 つ（haddock 付き）。
+
+### D5: テストは新規ファイルに分離＋共有 Arbitrary モジュール（実装時改訂）
+
+pr-clean は既存 `Tests/Tests.hs` に 932 行を追記していた。`Tests/TestAC.hs` に分離し hook のみを Tests.hs に置く計画だったが、実装時に Haskell の制約が判明: TestAC が必要とする orphan `Arbitrary` インスタンス（SignatureALG / DateTime / DistinguishedName 等）は `Main` モジュールに定義されており、**Main は import 不能**。共有インスタンスと roundtrip プロパティを新モジュール `Tests/Arbitrary.hs` へ移動した（コード自体は無変更の移動。fork main も同じ Arbitrary.hs 構造を採用していた実績がある）。
+
+結果、Tests.hs の diff は「hook 数行＋インスタンス移動による削除」となる。コミットメッセージで移動であることを明示しレビューノイズを抑える。
 
 ### D6: pr-clean の 10 コミットは論理単位に再構成
 

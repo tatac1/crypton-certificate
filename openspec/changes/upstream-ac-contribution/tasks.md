@@ -16,38 +16,39 @@ pr-clean 10 コミットの行き先対応表（design.md D6 の取り込み漏�
 
 ## 1. 共通準備
 
-- [ ] 1.1 upstream/main (c20fcc7) から `pr1-rfc-encoding-fixes` ブランチを作成
-- [ ] 1.2 upstream の `fourmolu.yaml` と CI ワークフロー（GitHub Actions）の内容を確認し、ローカル検証手順（隔離 project file での `cabal build` / `cabal test`）を確立
-- [ ] 1.3 OpenSSL でテストベクタを生成: (a) directoryName SAN を含む証明書、(b) RFC 5755 準拠 AC（PR#2 用）
+- [x] 1.1 upstream/main (c20fcc7) から `pr1-rfc-encoding-fixes` ブランチを作成
+- [x] 1.2 upstream の `fourmolu.yaml` と CI ワークフロー（GitHub Actions）の内容を確認し、ローカル検証手順（隔離 project file での `cabal build` / `cabal test`）を確立 — ベースライン: 改変前 upstream/main で両テストスイート PASS を実測（GHC 9.10.2 / macOS）
+- [x] 1.3 OpenSSL でテストベクタを生成: (a) directoryName SAN を含む証明書 ✓（constructed 0xA4 を実測確認）。(b) AC ベクタは OpenSSL CLI に AC 生成機能がないため、PR#3 の TestVectors.hs（固定 DER ベクタ）で代替（spec 改訂済）
 
 ## 2. PR#1: RFC 準拠エンコーディング修正
 
-- [ ] 2.1 `AlgorithmIdentifier.hs`: ECDSA / DSA の `toASN1` で parameters を省略（pr-clean 4cf10fb の 3 行 + RFC 引用コメント）
-- [ ] 2.2 `Ext.hs`: `AltNameDN` の encode を EXPLICIT constructed `[4]` に修正、decode は constructed / primitive 両受理（pr-clean ffe2169 の方式を upstream の AltNameDN 実装へ適応）
-- [ ] 2.3 テスト追加: DER バイト列の直接比較（parameters 不在、constructed タグ）、OpenSSL テストベクタの decode、旧形式 decode の後方互換
-- [ ] 2.4 検証: `cabal build` + `cabal test`（crypton-x509 / crypton-x509-validation）全 PASS、`fourmolu --mode check` 差分ゼロ
-- [ ] 2.5 コミット整理（修正 1 件 = 1 コミット、本文に RFC 根拠とテストベクタの出自を記載）
+- [x] 2.1 `AlgorithmIdentifier.hs`: ECDSA / DSA の `toASN1` で parameters を省略（pr-clean 4cf10fb の 3 行 + RFC 引用コメント）
+- [x] 2.2 `Ext.hs`: `AltNameDN` の encode を EXPLICIT constructed `[4]` に修正、decode は constructed / primitive 両受理
+- [x] 2.3 テスト追加: TDD（RED 実測→GREEN）。encode は OpenSSL ベクタと**バイト単位一致**、旧 primitive 形式の後方互換 decode も検証
+- [x] 2.4 検証: 全 12 テスト PASS（crypton-x509）+ validation PASS、fourmolu 差分ゼロ
+- [x] 2.5 コミット整理: `0c7d2a7`（AlgorithmIdentifier）+ `4a97a45`（directoryName）
 
 ## 3. PR#2: AC 型の追加
 
-- [ ] 3.1 `pr2-attribute-certificate` ブランチを PR#1 の上に作成
-- [ ] 3.2 pr-clean から `AttCert.hs` / `Attribute.hs` / `AC/Extension.hs` / `X509AC.hs` を取り込み（`git checkout upstream-pr-clean -- <paths>`）
-- [ ] 3.3 upstream の現行 `Ext.hs` に適応: `Attribute.hs` の import を `getAddr` / `encodeAltName`（upstream 既存名）に書き換え、`AltDirectoryName` 参照を `AltNameDN` に統一。pr-clean の rename・`AltDirectoryName` 追加は持ち込まない
-- [ ] 3.4 `Ext.hs`: `getAddr` / `parseGeneralNames` / `encodeAltName` / `encodeGeneralNames` を export リストに追加（変更はこの数行のみ）
-- [ ] 3.5 `Data.X509AC` ファサードを補完: pattern synonym（`HolderBaseCertificateID` 等）と PR#3 が必要とする全シンボルを再 export
-- [ ] 3.6 cabal: exposed-modules に `Data.X509AC`、other-modules に `AttCert` / `Attribute` / `AC.Extension` を追加
-- [ ] 3.7 テスト: pr-clean の 932 行分を `Tests/TestAC.hs` に分離（QuickCheck roundtrip / Arbitrary / RFC コメント、SBV 部分は除外）、`Tests.hs` に hook 数行、AC テストベクタ decode テストを追加
-- [ ] 3.8 検証: `cabal build` + `cabal test` 全 PASS、`grep -ri sbv` ゼロ件、fourmolu 差分ゼロ、`Data.X509` の既存 export 不変を確認
-- [ ] 3.9 コミット整理（型 → 拡張 → テストの論理単位）
+- [x] 3.1 `pr2-attribute-certificate` ブランチを PR#1 の上に作成
+- [x] 3.2 pr-clean から `AttCert.hs` / `Attribute.hs` / `AC/Extension.hs` / `X509AC.hs` を取り込み
+- [x] 3.3 【改訂 design D4】AC 側 17+ 箇所の書き換えより Ext.hs 内部（6 箇所）の rename が小さいため、`getAddr`→`parseGeneralName` / `encodeAltName`→`encodeGeneralName` の rename を採用（module-private のため公開 API 不変）。`AltDirectoryName`→`AltNameDN` 統一は実施
+- [x] 3.4 `Ext.hs`: 4 関数を haddock 付きで export
+- [x] 3.5 ファサード補完: pattern synonym 3 種 + `GeneralNames`（PR#3 ビルドで発覚し fixup で追補）
+- [x] 3.6 cabal: exposed に `Data.X509AC`、other-modules に 3 モジュール追加
+- [x] 3.7 【改訂 design D5】orphan インスタンスは Main から import 不能のため `Tests/Arbitrary.hs` に無変更移動し、AC テストは `Tests/TestAC.hs` に分離（SBV 除外）。hook は 1 行
+- [x] 3.8 検証: 全 28 テスト PASS、sbv ゼロ件、fourmolu 差分ゼロ
+- [x] 3.9 コミット整理: `a598d15`（core types）→ `995f420`（extensions + facade）→ `ec74ffa`（tests）。各コミット単独ビルドを detached HEAD で実測
+- [x] 3.10 【追加】PR#1 修正の実効確認: arbitraryAltName が `AltNameDN` を含み、roundtrip が constructed 経路を通過
 
 ## 4. PR#3: 検証パッケージ
 
-- [ ] 4.1 `pr3-ac-validation` ブランチを PR#2 の上に作成
-- [ ] 4.2 pr-clean から `crypton-x509-ac-validation/` を取り込み（SBV.hs と sbv-tests フラグは除外）
-- [ ] 4.3 import を公開 API に統一: `Data.X509.AttCert` / `Data.X509.AlgorithmIdentifier` 直 import を `Data.X509AC` / `Data.X509` に書き換え（不足があれば 3.5 のファサードを補完して PR#2 に反映）
-- [ ] 4.4 `cabal.project` と CI ワークフローにパッケージを登録
-- [ ] 4.5 検証: 全パッケージ `cabal build` + `cabal test` PASS、hidden モジュール直 import ゼロ、fourmolu 差分ゼロ
-- [ ] 4.6 コミット整理
+- [x] 4.1 `pr3-ac-validation` ブランチを PR#2 の上に作成
+- [x] 4.2 pr-clean から取り込み（SBV.hs / sbv-tests フラグ / CPP 分岐を除去、cabal を upstream 様式で書き直し、test 依存 memory→ram、crypton-x509 >= 1.9.1）
+- [x] 4.3 import を公開 API に統一（`Data.X509AC` / `Data.X509`）。hidden 直 import ゼロを確認。Tests/Certificate.hs のローカル `SignedAttributeCertificate` 別名はファサード提供に置換
+- [x] 4.4 `cabal.project` に登録（CI の build targets は `all:*` のため追加設定不要。stack.yaml は upstream 側が旧ディレクトリ名のまま壊れている既存問題のためスコープ外）
+- [x] 4.5 検証: `cabal build all` exit 0（全 6 パッケージ）、全 39 テスト PASS、fourmolu 差分ゼロ
+- [x] 4.6 コミット整理: `b0539e7`（package）+ `694fbba`（tests）
 
 ## 5. 提出と追跡
 

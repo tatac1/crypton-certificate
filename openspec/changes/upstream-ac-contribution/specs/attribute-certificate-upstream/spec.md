@@ -26,7 +26,7 @@ PR#1 ブランチ (`pr1-rfc-encoding-fixes`) SHALL は upstream/main (c20fcc7) �
 
 ### Requirement: PR#2 — AC 型が非破壊のモジュール追加として構成される
 
-PR#2 ブランチ (`pr2-attribute-certificate`) SHALL は PR#1 の上に積み、crypton-x509 パッケージへ RFC 5755 の型とエンコーディングを追加する。公開モジュールの追加は `Data.X509AC`（ファサード）1 本のみとし（MUST）、`Data.X509.AttCert` / `Data.X509.Attribute` / `Data.X509.AC.Extension` は other-modules に置く。既存ファイルの変更は (a) cabal のモジュール追加、(b) `Data.X509.Ext` の既存トップレベル関数の export 追加、(c) `Tests/Tests.hs` へのテスト hook 追加、に限定し、既存関数の rename・移動・挙動変更を行なってはならない（MUST NOT）。
+PR#2 ブランチ (`pr2-attribute-certificate`) SHALL は PR#1 の上に積み、crypton-x509 パッケージへ RFC 5755 の型とエンコーディングを追加する。公開モジュールの追加は `Data.X509AC`（ファサード）1 本のみとし（MUST）、`Data.X509.AttCert` / `Data.X509.Attribute` / `Data.X509.AC.Extension` は other-modules に置く。既存ファイルの変更は (a) cabal のモジュール追加、(b) `Data.X509.Ext` の GeneralName codec の公開（module-private だった `getAddr` / `encodeAltName` の `parseGeneralName` / `encodeGeneralName` への rename と export 追加を含む）、(c) テスト共有基盤の分離（orphan Arbitrary インスタンスと共有プロパティの `Tests/Arbitrary.hs` への無変更移動）と `Tests/Tests.hs` への hook 追加、に限定する。**公開済み**シンボルの rename・削除・挙動変更を行なってはならない（MUST NOT）。
 
 #### Scenario: ファサードから AC の全機能に到達できる
 
@@ -43,11 +43,6 @@ PR#2 ブランチ (`pr2-attribute-certificate`) SHALL は PR#1 の上に積み�
 - **WHEN** QuickCheck が任意の AC 型値（Arbitrary インスタンス）を生成し encode → decode する
 - **THEN** 元の値と一致する（`Tests/TestAC.hs`、SBV に依存しない）
 
-#### Scenario: 実 AC テストベクタがデコードできる
-
-- **WHEN** OpenSSL / 既存実装で生成された RFC 5755 準拠 AC (DER) をデコードする
-- **THEN** `decodeSignedAttributeCertificate` が成功し、holder / issuer / attributes が期待値と一致する
-
 ### Requirement: PR#3 — 検証パッケージが既存コードに触れず追加される
 
 PR#3 ブランチ (`pr3-ac-validation`) SHALL は PR#2 の上に積み、新規パッケージ `crypton-x509-ac-validation`（`Data.X509.AC.Validation` とサブモジュール Path / Revocation / Signature / Validity）を追加する。既存パッケージのソース変更は禁止し（MUST NOT）、許容される既存ファイル変更は `cabal.project` と CI ワークフローへのパッケージ登録のみとする。crypton-x509 からの import は公開 API（`Data.X509AC` / `Data.X509`）に限定する（MUST）。新規の外部依存を導入してはならない（MUST NOT、依存は upstream 既存依存の範囲内）。
@@ -60,7 +55,7 @@ PR#3 ブランチ (`pr3-ac-validation`) SHALL は PR#2 の上に積み、新規�
 #### Scenario: RFC 5755 検証がテストで確認される
 
 - **WHEN** `cabal test crypton-x509-ac-validation` を実行する
-- **THEN** 署名・有効期間・パス・失効の検証テスト（TestACValidation / StaticTests / TestVectors）が PASS する
+- **THEN** 署名・有効期間・パス・失効の検証テスト（TestACValidation / StaticTests）と、固定 RFC 5755 テストベクタ (DER) のデコード検証（TestVectors）が PASS する
 
 ### Requirement: SBV 形式検証は upstream PR に含めない
 
