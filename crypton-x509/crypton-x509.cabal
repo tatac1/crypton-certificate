@@ -37,6 +37,8 @@ library
         Data.X509.CRL
         Data.X509.OID
         Data.X509.Signed
+        Data.X509.AttCert
+        Data.X509.Attribute
 
     default-language: Haskell2010
     ghc-options:      -Wall

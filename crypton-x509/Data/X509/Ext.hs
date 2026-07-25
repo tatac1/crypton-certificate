@@ -35,6 +35,12 @@ module Data.X509.Ext (
     extensionDecode,
     extensionEncode,
     recognizedOIDs,
+
+    -- * Parsing and encoding GeneralName
+    parseGeneralName,
+    parseGeneralNames,
+    encodeGeneralName,
+    encodeGeneralNames,
 ) where
 
 import Control.Applicative
@@ -293,10 +299,11 @@ instance Extension ExtCrlDistributionPoints where
 -- extEncode (ExtCrlDistributionPoints )
 
 parseGeneralNames :: ParseASN1 [AltName]
-parseGeneralNames = onNextContainer Sequence $ getMany getAddr
+parseGeneralNames = onNextContainer Sequence $ getMany parseGeneralName
 
-getAddr :: ParseASN1 AltName
-getAddr = do
+-- | Parse a single GeneralName (RFC 5280 4.2.1.6).
+parseGeneralName :: ParseASN1 AltName
+parseGeneralName = do
     m <- onNextContainerMaybe (Container Context 0) getComposedAddr
     case m of
         Nothing -> getSimpleAddr
@@ -359,17 +366,18 @@ getAddr = do
 encodeGeneralNames :: [AltName] -> [ASN1]
 encodeGeneralNames names =
     [Start Sequence]
-        ++ concatMap encodeAltName names
+        ++ concatMap encodeGeneralName names
         ++ [End Sequence]
 
-encodeAltName :: AltName -> [ASN1]
-encodeAltName (AltNameRFC822 n) = [Other Context 1 $ BC.pack n]
-encodeAltName (AltNameDNS n) = [Other Context 2 $ BC.pack n]
-encodeAltName (AltNameDN dn) =
+-- | Encode a single GeneralName (RFC 5280 4.2.1.6).
+encodeGeneralName :: AltName -> [ASN1]
+encodeGeneralName (AltNameRFC822 n) = [Other Context 1 $ BC.pack n]
+encodeGeneralName (AltNameDNS n) = [Other Context 2 $ BC.pack n]
+encodeGeneralName (AltNameDN dn) =
     Start (Container Context 4) : toASN1 dn [End (Container Context 4)]
-encodeAltName (AltNameURI n) = [Other Context 6 $ BC.pack n]
-encodeAltName (AltNameIP n) = [Other Context 7 $ n]
-encodeAltName (AltNameXMPP n) =
+encodeGeneralName (AltNameURI n) = [Other Context 6 $ BC.pack n]
+encodeGeneralName (AltNameIP n) = [Other Context 7 $ n]
+encodeGeneralName (AltNameXMPP n) =
     [ Start (Container Context 0)
     , OID [1, 3, 6, 1, 5, 5, 7, 8, 5]
     , Start (Container Context 0)
@@ -377,7 +385,7 @@ encodeAltName (AltNameXMPP n) =
     , End (Container Context 0)
     , End (Container Context 0)
     ]
-encodeAltName (AltNameDNSSRV n) =
+encodeGeneralName (AltNameDNSSRV n) =
     [ Start (Container Context 0)
     , OID [1, 3, 6, 1, 5, 5, 7, 8, 5]
     , Start (Container Context 0)
@@ -456,7 +464,7 @@ encodeNameConstraints (ExtNameConstraints permitted excluded) =
 encodeGeneralSubtree :: GeneralSubtree -> [ASN1]
 encodeGeneralSubtree (GeneralSubtree base minimum' maximum') =
     [Start Sequence]
-        ++ encodeAltName base
+        ++ encodeGeneralName base
         ++ ( if minimum' /= 0
                 then [Other Context 0 (encodeASN1' DER [IntVal minimum'])]
                 else []
@@ -502,7 +510,7 @@ decodeGeneralSubtree
     :: [ASN1]
     -> Either String (GeneralSubtree, [ASN1])
 decodeGeneralSubtree (Start Sequence : xs) = do
-    (base, rest1) <- runParseASN1State getAddr xs
+    (base, rest1) <- runParseASN1State parseGeneralName xs
 
     let (minimum', rest2) =
             case rest1 of
