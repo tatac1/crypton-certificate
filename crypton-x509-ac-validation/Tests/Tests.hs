@@ -1,0 +1,16 @@
+module Main (main) where
+
+import StaticTests
+import Test.Tasty
+import TestACValidation
+
+main :: IO ()
+main = defaultMain allTests
+
+allTests :: TestTree
+allTests =
+    testGroup
+        "x509-ac-validation tests"
+        [ tests -- QuickCheck property tests from TestACValidation
+        , staticTests -- PKITS-style static tests from StaticTests
+        ]
